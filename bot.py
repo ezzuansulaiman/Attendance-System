@@ -15,6 +15,7 @@ Admin commands:
 """
 
 import calendar
+from html import escape
 import logging
 import os
 from datetime import date, datetime, time, timedelta, timezone
@@ -41,6 +42,14 @@ from telegram.ext import (
 
 import db
 from constants import DAY_ABBR_MS, LEAVE_TYPES, REGIONS, STATUS_LABELS
+from supporting_docs import (build_supporting_doc_name,
+                             ensure_supporting_doc_dir,
+                             get_absolute_supporting_doc_path,
+                             is_allowed_image,
+                             leave_type_requires_supporting_doc)
+from telegram_helpers import (admin_chat_ids_from_env, admin_user_ids_from_env,
+                              leave_approval_markup)
+from workflow import ANNUAL_LEAVE_NOTICE_DAYS, build_checkin_note, parse_checkin_note
 
 load_dotenv()
 
@@ -51,11 +60,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-ADMIN_IDS = {
-    int(x.strip())
-    for x in os.getenv("ADMIN_TELEGRAM_IDS", "").split(",")
-    if x.strip().isdigit()
-}
+ADMIN_IDS = admin_user_ids_from_env()
+ADMIN_CHAT_IDS = admin_chat_ids_from_env()
 BOT_TIMEZONE = os.getenv("BOT_TIMEZONE", "Asia/Kuala_Lumpur")
 WORKDAY_START = os.getenv("WORKDAY_START", "07:00")
 WORKDAY_END = os.getenv("WORKDAY_END", "17:30")
@@ -70,10 +76,10 @@ except Exception:
     )
 
 REG_NAME, REG_REGION = range(2)
-LEAVE_TYPE, LEAVE_FROM, LEAVE_TO, LEAVE_REASON = range(4, 8)
+LEAVE_TYPE, LEAVE_FROM, LEAVE_TO, LEAVE_REASON, LEAVE_PROOF = range(4, 9)
 
 MENU_CHECKIN = "Hadir Hari Ini"
-MENU_LEAVE = "Mohon Cuti"
+MENU_LEAVE = "Tidak Hadir / Cuti"
 MENU_STATUS = "Status Bulan Ini"
 MENU_HELP = "Bantuan"
 MENU_PENDING = "Semak Permohonan"
@@ -98,6 +104,11 @@ def _is_admin(update: Update) -> bool:
 
 def _get_emp(update: Update):
     return db.get_employee_by_telegram(str(update.effective_user.id))
+
+
+def _is_group_chat(update: Update) -> bool:
+    chat = update.effective_chat
+    return bool(chat and chat.type in {"group", "supergroup"})
 
 
 def _work_schedule_label() -> str:
@@ -127,7 +138,9 @@ def _admin_menu_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
-def _main_menu_markup(emp=None, is_admin=False):
+def _main_menu_markup(update=None, emp=None, is_admin=False):
+    if update and _is_group_chat(update):
+        return ReplyKeyboardRemove()
     if is_admin:
         return _admin_menu_keyboard()
     if emp:
@@ -135,16 +148,152 @@ def _main_menu_markup(emp=None, is_admin=False):
     return ReplyKeyboardRemove()
 
 
-async def _notify_admins(app, message: str):
-    for admin_id in ADMIN_IDS:
+def _build_leave_admin_message(leave_request, proof_line, reason):
+    safe_name = escape(leave_request["full_name"])
+    safe_region = escape(REGIONS.get(leave_request["region"], leave_request["region"]))
+    safe_leave = escape(STATUS_LABELS.get(leave_request["leave_type"], leave_request["leave_type"]))
+    safe_reason = escape(reason or "-")
+    return (
+        f"Permohonan cuti baharu (ID #{leave_request['id']})\n"
+        f"<b>{safe_name}</b> - {safe_region}\n"
+        f"Jenis: {safe_leave}\n"
+        f"Tarikh: {leave_request['date_from']} hingga {leave_request['date_to']}\n"
+        f"Bukti gambar: {proof_line}\n"
+        f"Sebab: {safe_reason}\n\n"
+        f"Anda boleh tekan butang di bawah atau guna /lulus {leave_request['id']} "
+        f"dan /tolak {leave_request['id']}."
+    )
+
+
+async def _notify_admins(app, message: str, photo_path=None, reply_markup=None):
+    for admin_id in ADMIN_CHAT_IDS:
         try:
-            await app.bot.send_message(
-                chat_id=admin_id,
-                text=message,
-                parse_mode="HTML",
-            )
+            if photo_path and os.path.exists(photo_path):
+                with open(photo_path, "rb") as proof_stream:
+                    await app.bot.send_photo(
+                        chat_id=admin_id,
+                        photo=proof_stream,
+                        caption=message,
+                        parse_mode="HTML",
+                        reply_markup=reply_markup,
+                    )
+            else:
+                await app.bot.send_message(
+                    chat_id=admin_id,
+                    text=message,
+                    parse_mode="HTML",
+                    reply_markup=reply_markup,
+                )
         except Exception as exc:
             logger.warning("Gagal hantar notifikasi ke admin %s: %s", admin_id, exc)
+
+
+async def _notify_employee_leave_status(context, leave_request, approved):
+    if not leave_request.get("telegram_id"):
+        return
+
+    try:
+        if approved:
+            text = (
+                "Permohonan cuti anda diluluskan.\n"
+                f"Jenis: {leave_request['leave_type']}\n"
+                f"Tarikh: {leave_request['date_from']} hingga {leave_request['date_to']}"
+            )
+        else:
+            text = (
+                "Maaf, permohonan cuti anda ditolak.\n"
+                f"Jenis: {leave_request['leave_type']}\n"
+                f"Tarikh: {leave_request['date_from']} hingga {leave_request['date_to']}\n"
+                "Sila hubungi penyelia untuk maklumat lanjut."
+            )
+        await context.bot.send_message(chat_id=int(leave_request["telegram_id"]), text=text)
+    except Exception:
+        pass
+
+
+async def _process_leave_action(context, lr_id, action, reviewed_by):
+    if action == "approve":
+        db.approve_leave(lr_id, reviewed_by=reviewed_by)
+    else:
+        db.reject_leave(lr_id, reviewed_by=reviewed_by)
+    leave_request = db.get_leave_request(lr_id)
+    return leave_request
+
+
+async def _download_supporting_doc(update, context, leave_type):
+    message = update.message
+    telegram_file = None
+    source_name = "proof.jpg"
+
+    if message.photo:
+        telegram_file = await message.photo[-1].get_file()
+        source_name = "proof.jpg"
+    elif message.document:
+        if not is_allowed_image(message.document.file_name, message.document.mime_type):
+            raise ValueError("Hanya gambar JPG, PNG, atau WEBP dibenarkan.")
+        telegram_file = await message.document.get_file()
+        source_name = message.document.file_name or "proof.jpg"
+
+    if not telegram_file:
+        raise ValueError("Sila hantar gambar bukti dalam bentuk foto atau fail imej.")
+
+    filename = build_supporting_doc_name(
+        leave_type,
+        context.user_data["cuti_emp_id"],
+        source_name,
+    )
+    target_path = os.path.join(ensure_supporting_doc_dir(), filename)
+    await telegram_file.download_to_drive(custom_path=target_path)
+    return filename
+
+
+async def _finalize_leave_request(update, context, reason, supporting_doc=None):
+    emp_id = context.user_data["cuti_emp_id"]
+    leave_type = context.user_data["leave_type"]
+    date_from = context.user_data["leave_from"]
+    date_to = context.user_data["leave_to"]
+
+    lr_id = db.insert_leave_request(
+        emp_id,
+        leave_type,
+        date_from,
+        date_to,
+        reason,
+        supporting_doc,
+    )
+    emp = db.get_employee(emp_id)
+    proof_line = "Ya" if supporting_doc else "Tidak"
+
+    await update.message.reply_text(
+        (
+            f"Permohonan cuti dihantar. (ID: #{lr_id})\n\n"
+            f"Jenis: <b>{leave_type}</b>\n"
+            f"Dari: {date_from}\n"
+            f"Hingga: {date_to}\n"
+            f"Bukti gambar: {proof_line}\n"
+            "Sila tunggu kelulusan daripada penyelia."
+        ),
+        parse_mode="HTML",
+        reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
+    )
+
+    photo_path = None
+    if supporting_doc:
+        try:
+            photo_path = get_absolute_supporting_doc_path(supporting_doc)
+        except ValueError:
+            photo_path = None
+
+    leave_request = db.get_leave_request(lr_id)
+    await _notify_admins(
+        context.application,
+        _build_leave_admin_message(leave_request, proof_line, reason),
+        photo_path=photo_path,
+        reply_markup=leave_approval_markup(lr_id),
+    )
+
+    context.user_data.clear()
+    return ConversationHandler.END
 
 
 async def _send_daily_checkin_reminder(context: ContextTypes.DEFAULT_TYPE):
@@ -167,7 +316,8 @@ async def _send_daily_checkin_reminder(context: ContextTypes.DEFAULT_TYPE):
                     "Peringatan kehadiran harian.\n\n"
                     f"Waktu kerja hari ini: {_work_schedule_label()}\n"
                     "Hari bekerja: Isnin hingga Jumaat\n"
-                    "Sila daftar hadir sekarang dengan /hadir."
+                    "Sila daftar hadir sekarang dengan /hadir. "
+                    "Jika tidak hadir hari ini, gunakan /cuti."
                 ),
             )
             sent += 1
@@ -193,11 +343,16 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Jawatan: {emp['designation']} | "
                 f"Kawasan: {REGIONS.get(emp['region'], emp['region'])}\n"
                 f"Waktu kerja: {_work_schedule_label()} (Isnin hingga Jumaat)\n\n"
-                "Gunakan butang menu di bawah untuk daftar hadir, mohon cuti, "
-                "atau semak status bulanan."
+                "Gunakan arahan /hadir, /cuti, atau /status."
             ),
             parse_mode="HTML",
-            reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
+            reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
+        )
+        return ConversationHandler.END
+
+    if _is_group_chat(update):
+        await update.message.reply_text(
+            "Untuk pendaftaran kali pertama, sila chat bot ini secara private dan taip /start."
         )
         return ConversationHandler.END
 
@@ -270,7 +425,7 @@ async def reg_region(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "kehadiran pertama anda."
         ),
         parse_mode="HTML",
-        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
+        reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
     )
 
     await _notify_admins(
@@ -296,21 +451,31 @@ async def cmd_hadir(update: Update, context: ContextTypes.DEFAULT_TYPE):
     existing = db.get_attendance(emp["id"], today)
     if existing:
         label = STATUS_LABELS.get(existing["status"], existing["status"])
+        timing = ""
+        parsed_note = parse_checkin_note(existing.get("notes"))
+        if existing["status"] == "P" and parsed_note:
+            timing = (
+                f"\nCheck-in: <b>{parsed_note['checkin_time']}</b> "
+                f"({parsed_note['timing_label']})"
+            )
         await update.message.reply_text(
             (
                 "Kehadiran hari ini sudah direkod.\n"
                 f"Status: <b>{existing['status']} - {label}</b>\n"
                 f"Tarikh: {today.strftime('%d/%m/%Y')}"
+                f"{timing}"
             ),
             parse_mode="HTML",
-            reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
+            reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
         )
         return
 
+    checkin = build_checkin_note(datetime.now(LOCAL_TZ).replace(tzinfo=None))
     db.upsert_attendance(
         emp["id"],
         today,
         "P",
+        notes=checkin["note"],
         entered_by=f"bot:{update.effective_user.id}",
     )
     await update.message.reply_text(
@@ -318,10 +483,11 @@ async def cmd_hadir(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Kehadiran direkod.\n\n"
             f"<b>{emp['full_name']}</b>\n"
             f"Tarikh: {today.strftime('%d %B %Y')}\n"
-            "Status: Hadir (P)"
+            "Status: Hadir (P)\n"
+            f"Check-in: {checkin['checkin_time']} ({checkin['timing_label']})"
         ),
         parse_mode="HTML",
-        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
+        reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
     )
 
 
@@ -331,6 +497,12 @@ async def cmd_cuti(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Sila /start untuk daftar dahulu.")
         return ConversationHandler.END
 
+    if _is_group_chat(update):
+        await update.message.reply_text(
+            "Untuk jaga privasi sebab cuti dan gambar bukti, sila mohon cuti melalui chat private dengan bot ini."
+        )
+        return ConversationHandler.END
+
     context.user_data["cuti_emp_id"] = emp["id"]
     keyboard = [
         [InlineKeyboardButton("AL - Cuti Tahunan", callback_data="AL")],
@@ -338,7 +510,12 @@ async def cmd_cuti(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("EML - Cuti Kecemasan", callback_data="EML")],
     ]
     await update.message.reply_text(
-        "Pilih jenis cuti:",
+        (
+            "Pilih jenis cuti:\n"
+            f"- AL perlu dipohon sekurang-kurangnya {ANNUAL_LEAVE_NOTICE_DAYS} hari lebih awal.\n"
+            "- Jika tidak hadir pada hari yang sama, gunakan MC atau Cuti Kecemasan.\n"
+            "- MC dan Cuti Kecemasan perlu disertakan gambar bukti."
+        ),
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
     return LEAVE_TYPE
@@ -354,9 +531,21 @@ async def leave_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     context.user_data["leave_type"] = leave_type
+    extra_note = ""
+    if leave_type == "AL":
+        extra_note = (
+            f"\nAL perlu dipohon sekurang-kurangnya "
+            f"{ANNUAL_LEAVE_NOTICE_DAYS} hari lebih awal."
+        )
+    elif leave_type in {"MC", "EML"}:
+        extra_note = (
+            "\nJenis ini sesuai untuk ketidakhadiran segera atau hari yang sama."
+            "\nGambar bukti akan diminta sebelum permohonan dihantar."
+        )
+
     await query.edit_message_text(
         (
-            f"Jenis cuti: <b>{leave_type}</b>\n\n"
+            f"Jenis cuti: <b>{leave_type}</b>{extra_note}\n\n"
             "Sila masukkan <b>tarikh mula</b> cuti (DD/MM/YYYY)."
         ),
         parse_mode="HTML",
@@ -416,45 +605,35 @@ async def leave_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if reason.lower() == "skip":
         reason = ""
 
-    emp_id = context.user_data["cuti_emp_id"]
     leave_type = context.user_data["leave_type"]
-    date_from = context.user_data["leave_from"]
-    date_to = context.user_data["leave_to"]
+    context.user_data["leave_reason"] = reason
+
+    if leave_type_requires_supporting_doc(leave_type):
+        await update.message.reply_text(
+            "Sila hantar gambar bukti sokongan untuk semakan kelulusan. Format: JPG, PNG, atau WEBP."
+        )
+        return LEAVE_PROOF
 
     try:
-        lr_id = db.insert_leave_request(emp_id, leave_type, date_from, date_to, reason)
+        return await _finalize_leave_request(update, context, reason)
     except Exception as exc:
         await update.message.reply_text(f"Ralat: {exc}")
         context.user_data.clear()
         return ConversationHandler.END
 
-    emp = db.get_employee(emp_id)
 
-    await update.message.reply_text(
-        (
-            f"Permohonan cuti dihantar. (ID: #{lr_id})\n\n"
-            f"Jenis: <b>{leave_type}</b>\n"
-            f"Dari: {date_from}\n"
-            f"Hingga: {date_to}\n"
-            "Sila tunggu kelulusan daripada penyelia."
-        ),
-        parse_mode="HTML",
-        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
-    )
+async def leave_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    leave_type = context.user_data.get("leave_type")
+    reason = context.user_data.get("leave_reason", "")
 
-    await _notify_admins(
-        context.application,
-        (
-            f"Permohonan cuti baharu (ID #{lr_id})\n"
-            f"<b>{emp['full_name']}</b> - {REGIONS.get(emp['region'], emp['region'])}\n"
-            f"Jenis: {leave_type} | {date_from} hingga {date_to}\n"
-            f"{'Sebab: ' + reason if reason else ''}\n\n"
-            f"Lulus: /lulus {lr_id}   Tolak: /tolak {lr_id}"
-        ),
-    )
-
-    context.user_data.clear()
-    return ConversationHandler.END
+    try:
+        supporting_doc = await _download_supporting_doc(update, context, leave_type)
+        return await _finalize_leave_request(update, context, reason, supporting_doc)
+    except Exception as exc:
+        await update.message.reply_text(
+            f"Ralat: {exc}\nSila hantar semula gambar bukti untuk sambung permohonan."
+        )
+        return LEAVE_PROOF
 
 
 async def cmd_baki(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -468,7 +647,7 @@ async def cmd_baki(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "Semakan baki cuti tidak dipaparkan melalui bot. Sila hubungi penyelia jika perlu.",
-        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
+        reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
     )
 
 
@@ -521,7 +700,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "\n".join(lines),
         parse_mode="HTML",
-        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
+        reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
     )
 
 
@@ -531,7 +710,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     menu_text = (
         "<b>Menu Bot KHSAR</b>\n\n"
         f"{MENU_CHECKIN} - daftar hadir hari ini\n"
-        f"{MENU_LEAVE} - hantar permohonan cuti\n"
+        f"{MENU_LEAVE} - maklum tidak hadir atau hantar permohonan cuti\n"
         f"{MENU_STATUS} - semak rekod bulan ini\n"
         f"{MENU_HELP} - paparan bantuan ini\n"
     )
@@ -544,7 +723,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         menu_text,
         parse_mode="HTML",
-        reply_markup=_main_menu_markup(emp=emp, is_admin=is_admin),
+        reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=is_admin),
     )
 
 
@@ -557,6 +736,7 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "Tiada permohonan cuti tertangguh.",
             reply_markup=_main_menu_markup(
+                update=update,
                 emp=_get_emp(update),
                 is_admin=True,
             ),
@@ -577,7 +757,7 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "\n".join(lines),
         parse_mode="HTML",
-        reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+        reply_markup=_main_menu_markup(update=update, emp=_get_emp(update), is_admin=True),
     )
 
 
@@ -589,14 +769,18 @@ async def cmd_lulus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not args or not args[0].isdigit():
         await update.message.reply_text(
             "Guna: /lulus <id>",
-            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+            reply_markup=_main_menu_markup(update=update, emp=_get_emp(update), is_admin=True),
         )
         return
 
     lr_id = int(args[0])
     try:
-        db.approve_leave(lr_id, reviewed_by=f"tg:{update.effective_user.id}")
-        leave_request = db.get_leave_request(lr_id)
+        leave_request = await _process_leave_action(
+            context,
+            lr_id,
+            "approve",
+            reviewed_by=f"tg:{update.effective_user.id}",
+        )
         await update.message.reply_text(
             (
                 f"Permohonan #{lr_id} diluluskan.\n"
@@ -604,24 +788,13 @@ async def cmd_lulus(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"({leave_request['date_from']} hingga {leave_request['date_to']})"
             ),
             parse_mode="HTML",
-            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+            reply_markup=_main_menu_markup(update=update, emp=_get_emp(update), is_admin=True),
         )
-        if leave_request.get("telegram_id"):
-            try:
-                await context.bot.send_message(
-                    chat_id=int(leave_request["telegram_id"]),
-                    text=(
-                        "Permohonan cuti anda diluluskan.\n"
-                        f"Jenis: {leave_request['leave_type']}\n"
-                        f"Tarikh: {leave_request['date_from']} hingga {leave_request['date_to']}"
-                    ),
-                )
-            except Exception:
-                pass
+        await _notify_employee_leave_status(context, leave_request, approved=True)
     except Exception as exc:
         await update.message.reply_text(
             f"Ralat: {exc}",
-            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+            reply_markup=_main_menu_markup(update=update, emp=_get_emp(update), is_admin=True),
         )
 
 
@@ -633,40 +806,84 @@ async def cmd_tolak(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not args or not args[0].isdigit():
         await update.message.reply_text(
             "Guna: /tolak <id>",
-            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+            reply_markup=_main_menu_markup(update=update, emp=_get_emp(update), is_admin=True),
         )
         return
 
     lr_id = int(args[0])
     try:
-        db.reject_leave(lr_id, reviewed_by=f"tg:{update.effective_user.id}")
-        leave_request = db.get_leave_request(lr_id)
+        leave_request = await _process_leave_action(
+            context,
+            lr_id,
+            "reject",
+            reviewed_by=f"tg:{update.effective_user.id}",
+        )
         await update.message.reply_text(
             (
                 f"Permohonan #{lr_id} ditolak.\n"
                 f"<b>{leave_request['full_name']}</b> - {leave_request['leave_type']}"
             ),
             parse_mode="HTML",
-            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+            reply_markup=_main_menu_markup(update=update, emp=_get_emp(update), is_admin=True),
         )
-        if leave_request.get("telegram_id"):
-            try:
-                await context.bot.send_message(
-                    chat_id=int(leave_request["telegram_id"]),
-                    text=(
-                        "Maaf, permohonan cuti anda ditolak.\n"
-                        f"Jenis: {leave_request['leave_type']}\n"
-                        f"Tarikh: {leave_request['date_from']} hingga {leave_request['date_to']}\n"
-                        "Sila hubungi penyelia untuk maklumat lanjut."
-                    ),
-                )
-            except Exception:
-                pass
+        await _notify_employee_leave_status(context, leave_request, approved=False)
     except Exception as exc:
         await update.message.reply_text(
             f"Ralat: {exc}",
-            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+            reply_markup=_main_menu_markup(update=update, emp=_get_emp(update), is_admin=True),
         )
+
+
+async def leave_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+
+    if not _is_admin(update):
+        await query.answer("Anda tiada akses untuk tindakan ini.", show_alert=True)
+        return
+
+    try:
+        _, action, lr_raw = query.data.split(":", 2)
+        lr_id = int(lr_raw)
+    except Exception:
+        await query.answer("Tindakan tidak sah.", show_alert=True)
+        return
+
+    try:
+        leave_request = await _process_leave_action(
+            context,
+            lr_id,
+            action,
+            reviewed_by=f"tg:{update.effective_user.id}",
+        )
+    except Exception as exc:
+        await query.answer(str(exc), show_alert=True)
+        return
+
+    await query.answer(
+        "Permohonan diluluskan." if action == "approve" else "Permohonan ditolak."
+    )
+    await query.edit_message_reply_markup(reply_markup=None)
+
+    if action == "approve":
+        text = (
+            f"Permohonan #{lr_id} diluluskan oleh {update.effective_user.full_name}.\n"
+            f"<b>{leave_request['full_name']}</b> - {leave_request['leave_type']} "
+            f"({leave_request['date_from']} hingga {leave_request['date_to']})"
+        )
+        approved = True
+    else:
+        text = (
+            f"Permohonan #{lr_id} ditolak oleh {update.effective_user.full_name}.\n"
+            f"<b>{leave_request['full_name']}</b> - {leave_request['leave_type']}"
+        )
+        approved = False
+
+    await query.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=_main_menu_markup(update=update, emp=_get_emp(update), is_admin=True),
+    )
+    await _notify_employee_leave_status(context, leave_request, approved=approved)
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -674,7 +891,7 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     emp = _get_emp(update)
     await update.message.reply_text(
         "Dibatalkan. Anda boleh pilih semula daripada menu di bawah.",
-        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
+        reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
     )
     return ConversationHandler.END
 
@@ -683,7 +900,7 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     emp = _get_emp(update)
     await update.message.reply_text(
         "Pilihan tidak dikenali. Gunakan butang menu di bawah atau taip /help.",
-        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
+        reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
     )
 
 
@@ -742,16 +959,21 @@ def main():
     leave_handler = ConversationHandler(
         entry_points=[CommandHandler("cuti", cmd_cuti)],
         states={
-            LEAVE_TYPE: [CallbackQueryHandler(leave_type_chosen)],
+            LEAVE_TYPE: [CallbackQueryHandler(leave_type_chosen, pattern="^(AL|MC|EML)$")],
             LEAVE_FROM: [MessageHandler(filters.TEXT & ~filters.COMMAND, leave_from)],
             LEAVE_TO: [MessageHandler(filters.TEXT & ~filters.COMMAND, leave_to)],
             LEAVE_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, leave_reason)],
+            LEAVE_PROOF: [MessageHandler(
+                filters.PHOTO | filters.Document.IMAGE | (filters.TEXT & ~filters.COMMAND),
+                leave_proof,
+            )],
         },
         fallbacks=[CommandHandler("cancel", cmd_cancel)],
     )
 
     application.add_handler(reg_handler)
     application.add_handler(leave_handler)
+    application.add_handler(CallbackQueryHandler(leave_action_callback, pattern="^leave:(approve|reject):\\d+$"))
     application.add_handler(CommandHandler("hadir", cmd_hadir))
     application.add_handler(CommandHandler("baki", cmd_baki))
     application.add_handler(CommandHandler("status", cmd_status))

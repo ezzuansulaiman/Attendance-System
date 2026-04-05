@@ -9,6 +9,9 @@
       <span class="hero-chip">Bulan: {{ "%02d"|format(month) }}/{{ year }}</span>
       {% if today_att %}
         <span class="hero-chip">Status Hari Ini: {{ status_labels.get(today_att.status, today_att.status) }}</span>
+        {% if today_att_meta %}
+          <span class="hero-chip">Check-in: {{ today_att_meta.checkin_time }} ({{ today_att_meta.timing_label }})</span>
+        {% endif %}
       {% else %}
         <span class="hero-chip">Status Hari Ini: Belum direkod</span>
       {% endif %}
@@ -19,15 +22,16 @@
       {% else %}
         <form method="post" action="{{ url_for('portal_checkin') }}">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn">Tanda Hadir Hari Ini</button>
+          <button type="submit" class="btn">Hadir</button>
         </form>
+        <a class="btn secondary" href="{{ url_for('portal_leave_new', mode='absence', date_from=today.isoformat(), date_to=today.isoformat()) }}">Tidak Hadir</a>
       {% endif %}
       <a class="btn accent" href="{{ url_for('portal_leave_new') }}">Mohon Cuti</a>
     </div>
   </div>
   <div class="callout" style="max-width:360px">
     <strong>Makluman</strong>
-    <p>Portal ini disediakan untuk rekod kehadiran dan semakan permohonan cuti pekerja sahaja.</p>
+    <p>Jika hadir, sistem akan simpan masa check-in dan tandakan lewat bila melepasi waktu cut-off. Jika tidak hadir hari ini, gunakan MC atau Cuti Kecemasan.</p>
   </div>
 </section>
 

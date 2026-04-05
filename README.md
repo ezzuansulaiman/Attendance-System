@@ -44,6 +44,7 @@ SERVICE_MODE=bot
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 TELEGRAM_BOT_TOKEN=<token-botfather>
 ADMIN_TELEGRAM_IDS=<id1,id2>
+ADMIN_TELEGRAM_GROUP_IDS=<group_id_optional>
 BOT_TIMEZONE=Asia/Kuala_Lumpur
 WORKDAY_START=07:00
 WORKDAY_END=17:30
@@ -51,6 +52,9 @@ WORKDAY_END=17:30
 
 Bot akan hantar peringatan check-in automatik kepada pekerja aktif yang telah
 link Telegram pada setiap hari Isnin hingga Jumaat, tepat pada `WORKDAY_START`.
+Notifikasi permohonan cuti boleh dihantar terus ke chat admin individu dan juga
+ke admin group. Dalam group, admin boleh gunakan butang inline `Luluskan` /
+`Tolak` terus pada mesej notifikasi.
 
 ## Kenapa PostgreSQL paling sesuai
 

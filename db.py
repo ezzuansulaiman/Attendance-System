@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 
 from constants import LEAVE_DEFAULTS, LEAVE_TYPES, REGIONS, STATUS_CODES
+from workflow import validate_leave_request
 from werkzeug.security import check_password_hash, generate_password_hash
 
 logger = logging.getLogger(__name__)
@@ -504,6 +505,11 @@ def insert_leave_request(employee_id, leave_type, date_from, date_to,
     end_date = _parse_iso_date(date_to, "Tarikh akhir")
     if end_date < start_date:
         raise ValueError("Tarikh akhir tidak boleh lebih awal dari tarikh mula")
+    validate_leave_request(
+        leave_type,
+        start_date,
+        supporting_doc_present=bool(supporting_doc),
+    )
     with _get_conn() as conn:
         if USE_POSTGRES:
             cur = _run(conn, """

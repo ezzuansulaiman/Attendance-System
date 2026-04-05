@@ -6,19 +6,29 @@ Staff portal:     /portal        (login required, role=staff)
 """
 
 import calendar
+import asyncio
 import os
 import secrets
 from datetime import date, datetime
 from functools import wraps
+from html import escape
 
 from flask import (Flask, flash, redirect, render_template, request,
-                   send_file, session, url_for)
+                   send_file, send_from_directory, session, url_for)
 
 import db
 import reports
 from constants import (DAY_ABBR_MS, DESIGNATIONS, LEAVE_TYPES, REGIONS,
                        STATUS_CODES, STATUS_COLORS, STATUS_LABELS,
                        STATUS_TEXT_COLORS)
+from supporting_docs import (build_supporting_doc_name,
+                             ensure_supporting_doc_dir,
+                             get_absolute_supporting_doc_path,
+                             is_allowed_image,
+                             leave_type_requires_supporting_doc)
+from telegram_helpers import admin_chat_ids_from_env, leave_approval_markup
+from workflow import (ANNUAL_LEAVE_NOTICE_DAYS, build_checkin_note,
+                      parse_checkin_note)
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-me-in-production")
@@ -27,6 +37,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.getenv(
     "SESSION_COOKIE_SECURE", ""
 ).lower() in ("1", "true")
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "5")) * 1024 * 1024
 
 
 def _csrf_token():
@@ -52,6 +63,90 @@ def validate_csrf():
         flash("Sesi borang tidak sah. Sila cuba semula.", "error")
         return redirect(request.referrer or url_for("login"))
     return None
+
+
+def _save_supporting_doc(file_storage, leave_type, employee_id):
+    if not file_storage or not file_storage.filename:
+        return None
+    if not is_allowed_image(file_storage.filename, file_storage.mimetype):
+        raise ValueError("Hanya fail gambar JPG, PNG, atau WEBP dibenarkan.")
+
+    filename = build_supporting_doc_name(
+        leave_type,
+        employee_id,
+        file_storage.filename,
+    )
+    target_dir = ensure_supporting_doc_dir()
+    file_storage.save(os.path.join(target_dir, filename))
+    return filename
+
+
+def _build_leave_admin_message(leave_request):
+    leave_label = STATUS_LABELS.get(
+        leave_request["leave_type"], leave_request["leave_type"]
+    )
+    safe_name = escape(leave_request["full_name"])
+    safe_region = escape(REGIONS.get(leave_request["region"], leave_request["region"]))
+    safe_leave = escape(leave_label)
+    safe_reason = escape(leave_request.get("reason") or "-")
+    safe_support = "Ada" if leave_request.get("supporting_doc") else "Tiada"
+    return (
+        f"Permohonan cuti baharu (ID #{leave_request['id']})\n"
+        f"<b>{safe_name}</b> - {safe_region}\n"
+        f"Jenis: {safe_leave}\n"
+        f"Tarikh: {leave_request['date_from']} hingga {leave_request['date_to']}\n"
+        f"Bukti gambar: {safe_support}\n"
+        f"Sebab: {safe_reason}\n\n"
+        f"Lulus: /lulus {leave_request['id']}   Tolak: /tolak {leave_request['id']}"
+    )
+
+
+def _notify_admins_via_telegram(leave_request):
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    admin_ids = admin_chat_ids_from_env()
+    if not token or not admin_ids:
+        return
+
+    async def _send():
+        from telegram import Bot
+
+        bot = Bot(token=token)
+        message = _build_leave_admin_message(leave_request)
+        photo_path = None
+        if leave_request.get("supporting_doc"):
+            try:
+                photo_path = get_absolute_supporting_doc_path(
+                    leave_request["supporting_doc"]
+                )
+            except ValueError:
+                photo_path = None
+
+        for chat_id in admin_ids:
+            try:
+                if photo_path and os.path.exists(photo_path):
+                    with open(photo_path, "rb") as proof_stream:
+                        await bot.send_photo(
+                            chat_id=chat_id,
+                            photo=proof_stream,
+                            caption=message,
+                            parse_mode="HTML",
+                            reply_markup=leave_approval_markup(leave_request["id"]),
+                        )
+                else:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=message,
+                        parse_mode="HTML",
+                        reply_markup=leave_approval_markup(leave_request["id"]),
+                    )
+            except Exception:
+                continue
+        await bot.close()
+
+    try:
+        asyncio.run(_send())
+    except Exception:
+        return
 
 
 # ─── Auth helpers ─────────────────────────────────────────────────────────────
@@ -159,7 +254,8 @@ def healthz():
 @admin_required
 def dashboard():
     today = date.today()
-    year, month = today.year, today.month
+    month_str = request.args.get("month", today.strftime("%Y-%m"))
+    year, month = _parse_month(month_str)
 
     pending = db.count_pending_leaves()
     present_total = {r: db.count_present_today(r) for r in REGIONS}
@@ -176,6 +272,7 @@ def dashboard():
         regions=REGIONS,
         year=year,
         month=month,
+        month_str=f"{year}-{month:02d}",
     )
 
 
@@ -313,6 +410,13 @@ def leave_detail(lr_id):
                            status_labels=STATUS_LABELS)
 
 
+@app.route("/leaves/docs/<path:filename>")
+@admin_required
+def leave_supporting_doc(filename):
+    ensure_supporting_doc_dir()
+    return send_from_directory(ensure_supporting_doc_dir(), filename)
+
+
 @app.route("/leaves/<int:lr_id>/approve", methods=["POST"])
 @admin_required
 def leave_approve(lr_id):
@@ -356,8 +460,21 @@ def leave_new():
             date_from = request.form["date_from"]
             date_to = request.form["date_to"]
             reason = request.form.get("reason", "").strip()
-            lr_id = db.insert_leave_request(emp_id, leave_type,
-                                            date_from, date_to, reason)
+            supporting_doc = _save_supporting_doc(
+                request.files.get("supporting_doc"),
+                leave_type,
+                emp_id,
+            )
+            if leave_type_requires_supporting_doc(leave_type) and not supporting_doc:
+                raise ValueError("Sila muat naik gambar bukti untuk MC atau Cuti Kecemasan.")
+            lr_id = db.insert_leave_request(
+                emp_id,
+                leave_type,
+                date_from,
+                date_to,
+                reason,
+                supporting_doc,
+            )
             flash("Permohonan cuti dikemukakan.", "success")
             return redirect(url_for("leave_detail", lr_id=lr_id))
         except Exception as e:
@@ -366,6 +483,10 @@ def leave_new():
         employees=employees,
         leave_types=LEAVE_TYPES,
         regions=REGIONS,
+        status_labels=STATUS_LABELS,
+        annual_leave_notice_days=ANNUAL_LEAVE_NOTICE_DAYS,
+        absence_mode=False,
+        today=date.today().isoformat(),
     )
 
 
@@ -641,6 +762,7 @@ def staff_portal():
         return redirect(url_for("login"))
     today = date.today()
     today_att = db.get_attendance(emp_id, today)
+    today_att_meta = parse_checkin_note(today_att.get("notes")) if today_att else None
 
     year, month = today.year, today.month
     _, grid = db.get_month_grid(emp["region"], year, month)
@@ -656,6 +778,7 @@ def staff_portal():
         emp=emp,
         today=today,
         today_att=today_att,
+        today_att_meta=today_att_meta,
         my_grid=my_grid,
         days=days,
         day_names=day_names,
@@ -680,9 +803,19 @@ def portal_checkin():
             label = STATUS_LABELS.get(existing["status"], existing["status"])
             flash(f"Kehadiran hari ini sudah direkod sebagai {label}.", "error")
         else:
-            db.upsert_attendance(emp_id, today, "P",
-                                 entered_by=session["username"])
-            flash("Kehadiran hari ini telah direkodkan. Terima kasih!", "success")
+            checkin = build_checkin_note(datetime.now())
+            db.upsert_attendance(
+                emp_id,
+                today,
+                "P",
+                notes=checkin["note"],
+                entered_by=session["username"],
+            )
+            flash(
+                "Kehadiran hari ini telah direkodkan pada "
+                f"{checkin['checkin_time']} ({checkin['timing_label']}).",
+                "success",
+            )
     return redirect(url_for("staff_portal"))
 
 
@@ -696,6 +829,10 @@ def portal_leave_new():
         flash("Akaun pekerja tidak aktif. Hubungi admin.", "error")
         return redirect(url_for("login"))
     today = date.today()
+    absence_mode = request.args.get("mode") == "absence"
+    leave_types = [lt for lt in LEAVE_TYPES if lt in {"MC", "EML"}] if absence_mode else LEAVE_TYPES
+    date_from_default = request.args.get("date_from", today.isoformat())
+    date_to_default = request.args.get("date_to", today.isoformat())
 
     if request.method == "POST":
         try:
@@ -703,7 +840,22 @@ def portal_leave_new():
             date_from = request.form["date_from"]
             date_to = request.form["date_to"]
             reason = request.form.get("reason", "").strip()
-            db.insert_leave_request(emp_id, leave_type, date_from, date_to, reason)
+            supporting_doc = _save_supporting_doc(
+                request.files.get("supporting_doc"),
+                leave_type,
+                emp_id,
+            )
+            if leave_type_requires_supporting_doc(leave_type) and not supporting_doc:
+                raise ValueError("Sila muat naik gambar bukti untuk MC atau Cuti Kecemasan.")
+            lr_id = db.insert_leave_request(
+                emp_id,
+                leave_type,
+                date_from,
+                date_to,
+                reason,
+                supporting_doc,
+            )
+            _notify_admins_via_telegram(db.get_leave_request(lr_id))
             flash("Permohonan cuti berjaya dihantar. Sila tunggu kelulusan.", "success")
             return redirect(url_for("staff_portal"))
         except Exception as e:
@@ -711,9 +863,14 @@ def portal_leave_new():
 
     return render_template("leaves/form.html",
         emp=emp,
-        leave_types=LEAVE_TYPES,
+        leave_types=leave_types,
         is_staff=True,
         today=today.isoformat(),
+        date_from_default=date_from_default,
+        date_to_default=date_to_default,
+        status_labels=STATUS_LABELS,
+        annual_leave_notice_days=ANNUAL_LEAVE_NOTICE_DAYS,
+        absence_mode=absence_mode,
     )
 
 

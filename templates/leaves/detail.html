@@ -33,6 +33,17 @@
       </div>
       {% endif %}
 
+      {% if lr.supporting_doc %}
+      <div class="callout" style="margin-bottom:18px">
+        <strong>Bukti Sokongan</strong>
+        <p style="margin-bottom:12px">Lampiran gambar untuk semakan kelulusan.</p>
+        <a class="btn secondary" href="{{ url_for('leave_supporting_doc', filename=lr.supporting_doc) }}" target="_blank">Buka Gambar</a>
+        <div style="margin-top:14px">
+          <img src="{{ url_for('leave_supporting_doc', filename=lr.supporting_doc) }}" alt="Bukti sokongan" style="max-width:100%;border-radius:16px;border:1px solid var(--line)">
+        </div>
+      </div>
+      {% endif %}
+
       <p class="muted" style="font-size:.86rem">Dikemukakan: {{ lr.submitted_at }}</p>
       {% if lr.reviewed_by %}
         <p class="muted" style="font-size:.86rem">Disemak oleh: <strong>{{ lr.reviewed_by }}</strong> pada {{ lr.reviewed_at }}</p>

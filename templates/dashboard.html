@@ -39,6 +39,44 @@
 </div>
 
 <div class="section-grid">
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Laporan Bulanan</h3>
+    </div>
+    <div class="panel-body">
+      <p class="muted" style="margin-top:0">
+        Pilih bulan dan kawasan, kemudian terus muat turun fail Excel yang diperlukan.
+      </p>
+      <form method="get" action="{{ url_for('dashboard') }}" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+        <div class="field" style="min-width:180px">
+          <label>Bulan Laporan</label>
+          <input type="month" name="month" value="{{ month_str }}">
+        </div>
+        <button type="submit" class="btn secondary">Tukar Bulan</button>
+      </form>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+        {% for rkey, rname in regions.items() %}
+        <form method="get" action="{{ url_for('report_internal_xlsx') }}" style="padding:16px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,#fff 0%,#f8faf6 100%)">
+          <input type="hidden" name="region" value="{{ rkey }}">
+          <input type="hidden" name="month" value="{{ month_str }}">
+          <div style="font:700 .95rem 'Trebuchet MS',sans-serif">{{ rname }}</div>
+          <div class="muted" style="margin:6px 0 14px">{{ month_str }}</div>
+          <div style="display:grid;gap:8px">
+            <button type="submit" class="btn" style="width:100%">Muat Turun Laporan Dalaman</button>
+            <button type="submit"
+                    class="btn secondary"
+                    style="width:100%"
+                    formaction="{{ url_for('report_external_xlsx') }}">Muat Turun Ringkasan Luaran</button>
+            <a class="btn secondary"
+               style="justify-content:center"
+               href="{{ url_for('attendance_grid', region=rkey, month=month_str) }}">Lihat Grid Bulanan</a>
+          </div>
+        </form>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
   <!-- Quick links -->
   <div class="panel">
     <div class="panel-head"><h3>Tindakan Pantas</h3></div>
