@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "Sistem Kehadiran" }}</title>
+  <style>
+    :root{
+      --bg:#eef0e6;--bg-deep:#e5e7d8;--panel:#fffdf7;--panel-soft:#f7f7f0;
+      --panel-tint:#f3f6ee;--ink:#223127;--muted:#68766c;--line:#d8decf;
+      --brand:#2d6954;--brand-deep:#1f493c;--accent:#b66b2b;
+      --accent-soft:#fbf0e3;--danger:#b42318;--danger-soft:#fff0ee;
+      --success:#157347;--success-soft:#ebfff2;--info:#2459b7;--info-soft:#edf5ff;
+      --shadow:0 22px 46px rgba(34,49,39,.10);
+      --shadow-soft:0 14px 28px rgba(34,49,39,.07);
+      --radius-xl:28px;--radius-lg:22px;--radius-md:18px;--radius-sm:14px;
+      --radius-btn:12px;
+      --font-base:"Trebuchet MS","Segoe UI",system-ui,-apple-system,sans-serif;
+    }
+    *{box-sizing:border-box}html{scroll-behavior:smooth}
+    body{margin:0;color:var(--ink);font-family:var(--font-base);
+      background:linear-gradient(160deg,#f5f7f2 0%,var(--bg) 60%,var(--bg-deep) 100%);
+      min-height:100vh}
+    a{color:var(--brand-deep);text-decoration:none}a:hover{text-decoration:underline}
+    .app-frame{position:relative;z-index:1;max-width:1560px;margin:0 auto;
+      padding:20px 18px 44px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;
+      margin-bottom:20px;padding:14px 18px;
+      background:rgba(255,253,247,.86);border:1px solid rgba(216,222,207,.9);
+      border-radius:24px;box-shadow:var(--shadow-soft);backdrop-filter:blur(14px);
+      animation:liftIn .45s ease both}
+    .brand-lockup{display:flex;align-items:center;gap:14px;min-width:0}
+    .brand-mark{width:46px;height:46px;border-radius:16px;background:
+      radial-gradient(circle at 25% 25%,rgba(255,255,255,.25),transparent 34%),
+      linear-gradient(135deg,var(--brand) 0%,var(--brand-deep) 100%);
+      color:#f7fff8;display:grid;place-items:center;
+      font:700 .9rem "Trebuchet MS",sans-serif;letter-spacing:.08em;
+      box-shadow:0 12px 22px rgba(31,73,60,.22)}
+    .brand-copy strong{display:block;font:700 .9rem "Trebuchet MS",sans-serif;
+      letter-spacing:.14em;text-transform:uppercase;color:var(--brand-deep)}
+    .brand-copy span{display:block;color:var(--muted);font:.92rem "Trebuchet MS",sans-serif;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .topbar-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+      justify-content:flex-end}
+    .nav-tabs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .nav-tab{display:inline-flex;align-items:center;justify-content:center;
+      padding:10px 14px;border-radius:999px;border:1px solid transparent;
+      color:var(--brand-deep);font:700 .88rem "Trebuchet MS",sans-serif;
+      letter-spacing:.02em;transition:transform .16s,background .16s,border-color .16s}
+    .nav-tab:hover{text-decoration:none;transform:translateY(-1px);
+      background:rgba(45,105,84,.06);border-color:rgba(45,105,84,.10)}
+    .nav-tab.active{background:linear-gradient(180deg,rgba(45,105,84,.14) 0%,rgba(45,105,84,.08) 100%);
+      border-color:rgba(45,105,84,.16)}
+    .user-pill{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;
+      border-radius:999px;background:var(--accent-soft);color:#8c5522;
+      border:1px solid rgba(182,107,43,.14);font:700 .86rem "Trebuchet MS",sans-serif}
+    .page-shell{display:grid;gap:18px}
+    .hero{display:flex;justify-content:space-between;align-items:stretch;gap:18px;
+      padding:28px;border-radius:var(--radius-xl);color:#f6fff8;
+      background:radial-gradient(circle at top right,rgba(255,255,255,.14),transparent 28%),
+        linear-gradient(135deg,rgba(34,81,65,.98) 0%,rgba(52,104,80,.94) 52%,rgba(40,88,75,.96) 100%);
+      box-shadow:0 22px 52px rgba(31,73,60,.20);overflow:hidden;position:relative;
+      animation:liftIn .55s ease both}
+    .hero::after{content:"";position:absolute;inset:auto -80px -90px auto;width:260px;
+      height:260px;border-radius:50%;
+      background:radial-gradient(circle,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 72%);
+      pointer-events:none}
+    .hero>*{position:relative;z-index:1}
+    .hero h1{margin:0;font-size:2rem;line-height:1.05;letter-spacing:.05em;
+      text-transform:uppercase}
+    .hero p{margin:10px 0 0;max-width:720px;color:rgba(246,255,248,.82);
+      font:1rem/1.55 "Trebuchet MS",sans-serif}
+    .hero-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+    .hero-chip{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;
+      border-radius:999px;background:rgba(255,255,255,.12);color:#f6fff8;
+      border:1px solid rgba(255,255,255,.14);font:700 .88rem "Trebuchet MS",sans-serif}
+    .hero-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;
+      margin-top:16px}
+    .btn,button{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+      border:none;border-radius:var(--radius-btn);padding:11px 17px;
+      background:linear-gradient(180deg,var(--brand) 0%,var(--brand-deep) 100%);
+      color:#fff;font:700 .92rem "Trebuchet MS",sans-serif;cursor:pointer;
+      box-shadow:var(--shadow-soft);transition:transform .16s,box-shadow .16s,filter .16s}
+    .btn.secondary,button.secondary{background:#edf2ea;color:var(--brand-deep);
+      border:1px solid rgba(45,105,84,.08);box-shadow:none}
+    .btn.danger,button.danger{background:linear-gradient(180deg,#c33f33 0%,var(--danger) 100%)}
+    .btn.accent,button.accent{background:linear-gradient(180deg,#d4822f 0%,var(--accent) 100%)}
+    .btn:hover,button:hover{text-decoration:none;transform:translateY(-1px);
+      box-shadow:0 16px 28px rgba(34,49,39,.10)}
+    .panel{background:linear-gradient(180deg,rgba(255,253,247,.98) 0%,rgba(250,250,244,.98) 100%);
+      border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow);
+      overflow:hidden;animation:liftIn .55s ease both}
+    .panel+.panel{margin-top:18px}
+    .panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;
+      padding:18px 22px;border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg,rgba(45,105,84,.045) 0%,rgba(247,247,240,.92) 100%)}
+    .panel-head h2,.panel-head h3{margin:0;font-size:1.08rem;letter-spacing:.01em}
+    .panel-body{padding:22px}
+    .grid{display:grid;gap:16px}
+    .grid.cards{grid-template-columns:repeat(auto-fit,minmax(196px,1fr))}
+    .card{padding:18px;border-radius:var(--radius-md);
+      background:linear-gradient(180deg,#fff 0%,var(--panel-soft) 100%);
+      border:1px solid var(--line);position:relative;overflow:hidden;
+      transition:transform .16s,box-shadow .16s}
+    .card:hover{transform:translateY(-2px);box-shadow:0 16px 26px rgba(34,49,39,.08)}
+    .card.warm{background:linear-gradient(180deg,#fffaf4 0%,#fff3e8 100%)}
+    .card.success{background:linear-gradient(180deg,#fbfffb 0%,#eff9f1 100%)}
+    .card.alert{background:linear-gradient(180deg,#fff7f6 0%,#fff1ef 100%)}
+    .card.info{background:linear-gradient(180deg,#f0f5ff 0%,#e8f0ff 100%)}
+    .card .label{font:700 .74rem "Trebuchet MS",sans-serif;text-transform:uppercase;
+      letter-spacing:.12em;color:var(--muted);margin-bottom:8px}
+    .card .value{font-size:1.82rem;font-weight:700}
+    .card .subtle{margin-top:7px;color:var(--muted);font:.88rem "Trebuchet MS",sans-serif}
+    .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .field label{color:var(--muted);font:700 .8rem "Trebuchet MS",sans-serif;
+      letter-spacing:.1em;text-transform:uppercase}
+    input,select,textarea{width:100%;padding:12px 13px;border-radius:14px;
+      border:1px solid var(--line);background:#fff;color:var(--ink);
+      font:1rem "Trebuchet MS",sans-serif;
+      transition:border-color .16s,box-shadow .16s,background .16s}
+    input:focus,select:focus,textarea:focus{outline:none;
+      border-color:rgba(45,105,84,.34);box-shadow:0 0 0 4px rgba(45,105,84,.10);
+      background:#fffefd}
+    textarea{min-height:100px;resize:vertical}
+    .flash-stack{display:grid;gap:10px;margin-bottom:18px}
+    .flash{border-radius:18px;padding:13px 15px;font:700 .92rem "Trebuchet MS",sans-serif;
+      box-shadow:var(--shadow-soft)}
+    .flash.success{background:var(--success-soft);color:var(--success);
+      border:1px solid rgba(21,115,71,.18)}
+    .flash.error{background:var(--danger-soft);color:var(--danger);
+      border:1px solid rgba(180,35,24,.18)}
+    .table-wrap{overflow:auto;border-radius:18px;
+      border:1px solid rgba(216,222,207,.65);background:#fff}
+    table{width:100%;border-collapse:collapse;min-width:600px}
+    thead th{position:sticky;top:0;z-index:1;background:rgba(247,247,240,.98);
+      backdrop-filter:blur(8px)}
+    th,td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+    tbody tr:nth-child(even){background:rgba(45,105,84,.018)}
+    tbody tr:hover{background:rgba(45,105,84,.045)}
+    th{text-align:left;color:var(--muted);font:700 .76rem "Trebuchet MS",sans-serif;
+      text-transform:uppercase;letter-spacing:.08em}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;
+      border-radius:999px;font:700 .78rem "Trebuchet MS",sans-serif;white-space:nowrap}
+    .badge.pending{background:#fef9c3;color:#854d0e}
+    .badge.approved{background:#dcfae6;color:#166534}
+    .badge.rejected{background:#fff4d6;color:var(--danger)}
+    .badge.staff{background:var(--info-soft);color:var(--info)}
+    .badge.admin{background:var(--accent-soft);color:#8c5522}
+    .status-badge{display:inline-flex;align-items:center;justify-content:center;
+      width:32px;height:22px;border-radius:6px;font:700 .75rem "Trebuchet MS",sans-serif}
+    .muted{color:var(--muted);font:.93rem "Trebuchet MS",sans-serif}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .inline-form{display:inline}
+    .back-link{display:inline-flex;align-items:center;gap:8px;margin-bottom:14px;
+      font:700 .9rem "Trebuchet MS",sans-serif}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;
+      flex-wrap:wrap;margin-bottom:14px}
+    .toolbar-group{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .section-grid{display:grid;gap:18px;
+      grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr)}
+    .callout{padding:18px;border-radius:20px;
+      background:linear-gradient(180deg,rgba(45,105,84,.08) 0%,rgba(45,105,84,.03) 100%);
+      border:1px solid rgba(45,105,84,.12)}
+    .callout strong{display:block;margin-bottom:8px;font:700 .84rem "Trebuchet MS",sans-serif;
+      text-transform:uppercase;letter-spacing:.12em;color:var(--brand-deep)}
+    .callout p{margin:0;color:var(--muted);font:.94rem/1.55 "Trebuchet MS",sans-serif}
+    .login-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(340px,.9fr);
+      gap:18px;align-items:stretch}
+    .feature-list{display:grid;gap:12px;margin-top:18px}
+    .feature-item{padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.12)}
+    .feature-item strong{display:block;margin-bottom:6px;font:700 .88rem "Trebuchet MS",sans-serif;
+      text-transform:uppercase;letter-spacing:.08em}
+    .feature-item span{display:block;font:.92rem/1.5 "Trebuchet MS",sans-serif;
+      color:rgba(246,255,248,.82)}
+    @keyframes liftIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    @media(max-width:1080px){.section-grid,.login-grid{grid-template-columns:1fr}.hero{padding:24px}}
+    @media(max-width:860px){.topbar{align-items:flex-start;flex-direction:column}
+      .topbar-right{justify-content:flex-start}.hero{flex-direction:column}
+      .panel-head{flex-direction:column;align-items:flex-start}
+      .app-frame{padding:16px 12px 36px}.hero h1{font-size:1.55rem}
+      .grid.cards{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:560px){.grid.cards{grid-template-columns:1fr}
+      .actions{flex-direction:column}.actions .btn,.actions button{width:100%;justify-content:center}}
+  </style>
+</head>
+<body>
+<div class="app-frame">
+  <header class="topbar">
+    <div class="brand-lockup">
+      <div class="brand-mark">AT</div>
+      <div class="brand-copy">
+        <strong>KHSAR Attendance</strong>
+        <span>Sistem Pengurusan Kehadiran Pekerja</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      {% if session.get("user_id") %}
+        <nav class="nav-tabs">
+          {% if session.get("user_role") == "admin" %}
+            <a class="nav-tab {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">Papan Pemuka</a>
+            <a class="nav-tab {% if 'attendance' in request.endpoint %}active{% endif %}" href="{{ url_for('attendance_entry') }}">Kehadiran</a>
+            <a class="nav-tab {% if request.endpoint == 'attendance_grid' %}active{% endif %}" href="{{ url_for('attendance_grid') }}">Grid Bulanan</a>
+            <a class="nav-tab {% if 'leave' in request.endpoint %}active{% endif %}" href="{{ url_for('leaves_list') }}">Cuti</a>
+            <a class="nav-tab {% if 'employee' in request.endpoint %}active{% endif %}" href="{{ url_for('employees_list') }}">Pekerja</a>
+            <a class="nav-tab {% if 'holiday' in request.endpoint %}active{% endif %}" href="{{ url_for('holidays_list') }}">Cuti Umum</a>
+          {% else %}
+            <a class="nav-tab {% if request.endpoint == 'staff_portal' %}active{% endif %}" href="{{ url_for('staff_portal') }}">Portal Saya</a>
+            <a class="nav-tab" href="{{ url_for('portal_leave_new') }}">Mohon Cuti</a>
+          {% endif %}
+        </nav>
+        <span class="user-pill">{{ session.get("username", "") }}</span>
+        <form class="inline-form" method="post" action="{{ url_for('logout') }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <button class="btn secondary" style="padding:8px 14px;font-size:.84rem">Log Keluar</button>
+        </form>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="page-shell">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-stack">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+</div>
+<script>
+  (function(){
+    document.querySelectorAll('.flash.success').forEach(function(el){
+      setTimeout(function(){
+        el.style.transition='opacity .4s ease';el.style.opacity='0';
+        setTimeout(function(){el.style.display='none'},420);
+      },4000);
+    });
+  }());
+</script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

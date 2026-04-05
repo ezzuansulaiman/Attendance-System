@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="hero">
+  <div>
+    <h1>Papan Pemuka</h1>
+    <p>Selamat datang, <strong>{{ session.username }}</strong>. Gambaran keseluruhan kehadiran hari ini.</p>
+    <div class="hero-meta">
+      <span class="hero-chip">📅 {{ today.strftime('%A, %d %B %Y') }}</span>
+      {% for rkey, rname in regions.items() %}
+        <span class="hero-chip">{{ rname }}: {{ present_total[rkey] }}/{{ active_total[rkey] }} hadir</span>
+      {% endfor %}
+    </div>
+    <div class="hero-actions">
+      <a class="btn" href="{{ url_for('attendance_entry') }}">+ Rekod Kehadiran</a>
+      <a class="btn secondary" href="{{ url_for('attendance_grid') }}">Grid Bulanan</a>
+      <a class="btn secondary" href="{{ url_for('leaves_list', status='pending') }}">
+        Permohonan Cuti
+        {% if pending > 0 %}<span style="background:#b42318;color:#fff;border-radius:999px;padding:1px 7px;font-size:.78rem;margin-left:4px">{{ pending }}</span>{% endif %}
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="grid cards">
+  {% for rkey, rname in regions.items() %}
+  <div class="card success">
+    <div class="label">{{ rname }} — Hadir Hari Ini</div>
+    <div class="value">{{ present_total[rkey] }}</div>
+    <div class="subtle">daripada {{ active_total[rkey] }} pekerja aktif</div>
+  </div>
+  {% endfor %}
+  <div class="card {% if pending > 0 %}alert{% else %}success{% endif %}">
+    <div class="label">Permohonan Cuti Tertangguh</div>
+    <div class="value">{{ pending }}</div>
+    <div class="subtle"><a href="{{ url_for('leaves_list', status='pending') }}">Semak sekarang →</a></div>
+  </div>
+</div>
+
+<div class="section-grid">
+  <!-- Quick links -->
+  <div class="panel">
+    <div class="panel-head"><h3>Tindakan Pantas</h3></div>
+    <div class="panel-body">
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+        {% for rkey, rname in regions.items() %}
+        <a class="btn secondary" href="{{ url_for('attendance_entry', region=rkey) }}" style="justify-content:flex-start">
+          📋 Rekod {{ rname }}
+        </a>
+        <a class="btn secondary" href="{{ url_for('attendance_grid', region=rkey, month='%d-%02d'|format(year, month)) }}" style="justify-content:flex-start">
+          📊 Grid {{ rname }}
+        </a>
+        <a class="btn secondary" href="{{ url_for('report_internal_xlsx', region=rkey, month='%d-%02d'|format(year, month)) }}" style="justify-content:flex-start">
+          📥 Laporan Dalaman ({{ rname }})
+        </a>
+        <a class="btn secondary" href="{{ url_for('report_external_xlsx', region=rkey, month='%d-%02d'|format(year, month)) }}" style="justify-content:flex-start">
+          📤 Ringkasan Luaran ({{ rname }})
+        </a>
+        {% endfor %}
+        <a class="btn secondary" href="{{ url_for('employees_list') }}" style="justify-content:flex-start">👥 Senarai Pekerja</a>
+        <a class="btn secondary" href="{{ url_for('holidays_list') }}" style="justify-content:flex-start">🗓 Cuti Umum</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pending leave requests -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Permohonan Cuti Tertangguh</h3>
+      <a class="btn secondary" style="padding:7px 12px;font-size:.84rem" href="{{ url_for('leaves_list', status='pending') }}">Semua →</a>
+    </div>
+    <div class="panel-body">
+      {% if recent_leaves %}
+        <div style="display:grid;gap:10px">
+          {% for lr in recent_leaves %}
+          <a href="{{ url_for('leave_detail', lr_id=lr.id) }}" style="display:block;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,#fff 0%,#f8faf6 100%);text-decoration:none;color:var(--ink)">
+            <div style="font:700 .9rem 'Trebuchet MS',sans-serif">{{ lr.full_name }}</div>
+            <div style="color:var(--muted);font:.84rem 'Trebuchet MS',sans-serif;margin-top:3px">
+              {{ lr.leave_type }} · {{ lr.date_from }} – {{ lr.date_to }}
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">Tiada permohonan tertangguh.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

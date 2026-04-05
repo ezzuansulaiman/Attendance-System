@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+<a class="back-link" href="{{ url_for('employees_list') }}">← Senarai Pekerja</a>
+
+<div class="panel" style="max-width:680px">
+  <div class="panel-head">
+    <h3>{% if emp %}Edit Pekerja{% else %}Tambah Pekerja Baharu{% endif %}</h3>
+  </div>
+  <div class="panel-body">
+    <form method="post" action="{{ action_url }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="form-grid" style="margin-bottom:14px">
+        <div class="field">
+          <label>Nama Penuh *</label>
+          <input type="text" name="full_name" required value="{{ emp.full_name if emp else '' }}"
+                 placeholder="Nama penuh seperti dalam IC">
+        </div>
+        <div class="field">
+          <label>No. IC (MyKad)</label>
+          <input type="text" name="ic_number" value="{{ emp.ic_number if emp else '' }}"
+                 placeholder="000000-00-0000">
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:14px">
+        <div class="field">
+          <label>Jawatan *</label>
+          <select name="designation" required>
+            <option value="">— Pilih —</option>
+            {% for d in designations %}
+              <option value="{{ d }}" {% if emp and emp.designation == d %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+            {% if emp and emp.designation not in designations %}
+              <option value="{{ emp.designation }}" selected>{{ emp.designation }}</option>
+            {% endif %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Jabatan / Unit</label>
+          <input type="text" name="department" value="{{ emp.department if emp else '' }}"
+                 placeholder="Contoh: Housekeeping">
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:14px">
+        <div class="field">
+          <label>Kawasan *</label>
+          <select name="region" required>
+            <option value="">— Pilih Kawasan —</option>
+            {% for rkey, rname in regions.items() %}
+              <option value="{{ rkey }}" {% if emp and emp.region == rkey %}selected{% endif %}>{{ rname }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Tarikh Mula Berkhidmat</label>
+          <input type="date" name="joined_date" value="{{ emp.joined_date if emp else '' }}">
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:14px">
+        <div class="field">
+          <label>ID Telegram</label>
+          <input type="text" name="telegram_id" value="{{ emp.telegram_id if emp else '' }}"
+                 placeholder="Nombor ID (set auto oleh bot)">
+        </div>
+        <div class="field">
+          <label>Hak Cuti AL (hari/tahun)</label>
+          <input type="number" name="al_entitlement" min="0" max="30"
+                 value="{{ emp.al_entitlement if emp else 8 }}">
+        </div>
+      </div>
+
+      {% if not emp %}
+      <div class="callout" style="margin-bottom:18px">
+        <strong>Akaun Web (Pilihan)</strong>
+        <p>Cipta akaun web untuk pekerja yang tidak menggunakan Telegram.</p>
+        <div class="form-grid" style="margin-top:12px">
+          <div class="field">
+            <label>Nama Pengguna</label>
+            <input type="text" name="username" placeholder="contoh: ahmad.ali" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Kata Laluan</label>
+            <input type="password" name="web_password" placeholder="Min 6 aksara" autocomplete="new-password">
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="actions">
+        <button type="submit" class="btn">{{ 'Kemaskini' if emp else 'Simpan Pekerja' }}</button>
+        <a class="btn secondary" href="{{ url_for('employees_list') }}">Batal</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

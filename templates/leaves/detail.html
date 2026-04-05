@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<a class="back-link" href="{{ url_for('leaves_list') }}">← Semua Permohonan</a>
+
+<div class="section-grid">
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Permohonan #{{ lr.id }}</h3>
+      <span class="badge {{ lr.status }}">
+        {% if lr.status == 'pending' %}Tertangguh
+        {% elif lr.status == 'approved' %}Diluluskan
+        {% else %}Ditolak{% endif %}
+      </span>
+    </div>
+    <div class="panel-body">
+      <div class="form-grid" style="margin-bottom:18px">
+        <div>
+          <div class="field"><label>Nama Pekerja</label><p style="margin:4px 0;font-weight:700">{{ lr.full_name }}</p></div>
+          <div class="field"><label>Jawatan</label><p style="margin:4px 0;color:var(--muted)">{{ lr.designation }}</p></div>
+          <div class="field"><label>Kawasan</label><p style="margin:4px 0;color:var(--muted)">{{ lr.region }}</p></div>
+        </div>
+        <div>
+          <div class="field"><label>Jenis Cuti</label><p style="margin:4px 0;font-weight:700;font-size:1.2rem">{{ lr.leave_type }}</p></div>
+          <div class="field"><label>Tarikh Dari</label><p style="margin:4px 0">{{ lr.date_from }}</p></div>
+          <div class="field"><label>Tarikh Hingga</label><p style="margin:4px 0">{{ lr.date_to }}</p></div>
+        </div>
+      </div>
+
+      {% if lr.reason %}
+      <div class="callout" style="margin-bottom:18px">
+        <strong>Sebab / Alasan</strong>
+        <p>{{ lr.reason }}</p>
+      </div>
+      {% endif %}
+
+      <p class="muted" style="font-size:.86rem">Dikemukakan: {{ lr.submitted_at }}</p>
+      {% if lr.reviewed_by %}
+        <p class="muted" style="font-size:.86rem">Disemak oleh: <strong>{{ lr.reviewed_by }}</strong> pada {{ lr.reviewed_at }}</p>
+        {% if lr.reviewer_notes %}
+          <div class="callout"><strong>Nota Penyemak</strong><p>{{ lr.reviewer_notes }}</p></div>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    {% if lr.status == 'pending' %}
+    <div class="panel">
+      <div class="panel-head"><h3>Tindakan</h3></div>
+      <div class="panel-body">
+        <form method="post" action="{{ url_for('leave_approve', lr_id=lr.id) }}" style="margin-bottom:14px">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <div class="field" style="margin-bottom:12px">
+            <label>Nota (pilihan)</label>
+            <textarea name="reviewer_notes" placeholder="Nota kelulusan..."></textarea>
+          </div>
+          <button type="submit" class="btn" style="width:100%">Luluskan Permohonan</button>
+        </form>
+        <form method="post" action="{{ url_for('leave_reject', lr_id=lr.id) }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <div class="field" style="margin-bottom:12px">
+            <label>Sebab Penolakan</label>
+            <textarea name="reviewer_notes" placeholder="Sebab ditolak..."></textarea>
+          </div>
+          <button type="submit" class="btn danger" style="width:100%">Tolak Permohonan</button>
+        </form>
+      </div>
+    </div>
+    {% elif lr.status == 'approved' %}
+    <div class="panel">
+      <div class="panel-head"><h3>Tindakan Lanjut</h3></div>
+      <div class="panel-body">
+        <p class="muted">Permohonan ini telah diluluskan. Rekod kehadiran telah dikemaskini.</p>
+        <form method="post" action="{{ url_for('leave_reject', lr_id=lr.id) }}" style="margin-top:14px">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <div class="field" style="margin-bottom:12px">
+            <label>Sebab Pembatalan</label>
+            <textarea name="reviewer_notes" placeholder="Nyatakan sebab..."></textarea>
+          </div>
+          <button type="submit" class="btn danger" style="width:100%">Batalkan Kelulusan</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="callout" style="margin-top:18px">
+      <strong>Legenda Jenis Cuti</strong>
+      <p>AL = Cuti Tahunan<br>MC = Cuti Sakit (Medical Certificate)<br>EML = Cuti Kecemasan</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

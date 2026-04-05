@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .grid-table{border-collapse:collapse;font-size:.78rem;font-family:"Trebuchet MS",sans-serif}
+  .grid-table th,.grid-table td{border:1px solid var(--line);padding:5px 4px;text-align:center;white-space:nowrap}
+  .grid-table thead th{background:rgba(247,247,240,.98);font:700 .74rem "Trebuchet MS",sans-serif;
+    text-transform:uppercase;letter-spacing:.06em;color:var(--muted);position:sticky;top:0;z-index:2}
+  .grid-table .col-name{text-align:left;min-width:160px;max-width:200px;
+    overflow:hidden;text-overflow:ellipsis;font-weight:700;position:sticky;left:0;z-index:1;
+    background:#fff}
+  .grid-table .col-no{width:32px;position:sticky;left:0;z-index:1;background:#fff}
+  .grid-table .col-desig{text-align:left;min-width:120px;max-width:150px;
+    overflow:hidden;text-overflow:ellipsis}
+  .grid-table .col-total{font-weight:700;background:rgba(45,105,84,.06)!important}
+  .grid-table tbody tr:nth-child(even) td{background:rgba(45,105,84,.015)}
+  .grid-table tbody tr:hover td{background:rgba(45,105,84,.05)!important}
+  .s-badge{display:inline-flex;align-items:center;justify-content:center;
+    width:28px;height:20px;border-radius:5px;font:700 .7rem "Trebuchet MS",sans-serif;cursor:default}
+  .day-abbr{font-size:.7rem;color:var(--muted);font-weight:400}
+  .ph-cell{background:#fef9c3!important}
+  .filter-row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
+  .filter-row .field{min-width:140px}
+  @media print{
+    .topbar,.flash-stack,.filter-row,.hero,.panel-head .btn{display:none!important}
+    .app-frame{padding:0}.panel{box-shadow:none;border:none}
+    .grid-table th,.grid-table td{font-size:7pt;padding:3px 2px;border:1px solid #aaa}
+    @page{size:A4 landscape;margin:8mm}
+  }
+</style>
+
+<div class="hero" style="padding:22px 28px">
+  <div>
+    <h1 style="font-size:1.6rem">Grid Kehadiran Bulanan</h1>
+    <p style="margin:6px 0 0">{{ region_name }} — {{ '%02d'|format(month) }}/{{ year }}</p>
+  </div>
+  <div class="hero-actions">
+    <a class="btn" href="{{ url_for('report_internal_xlsx', region=region, month=month_str) }}">⬇ Laporan Dalaman (.xlsx)</a>
+    <a class="btn secondary" href="{{ url_for('report_external_xlsx', region=region, month=month_str) }}">⬇ Ringkasan Luaran (.xlsx)</a>
+    <a class="btn secondary" href="{{ url_for('report_internal_print', region=region, month=month_str) }}" target="_blank">🖨 Cetak Dalaman</a>
+    <button class="btn secondary" onclick="window.print()">🖨 Cetak Grid</button>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <h3>Tetapan Paparan</h3>
+  </div>
+  <div class="panel-body">
+    <form class="filter-row" method="get">
+      <div class="field">
+        <label>Kawasan</label>
+        <select name="region" onchange="this.form.submit()">
+          {% for rkey, rname in regions.items() %}
+            <option value="{{ rkey }}" {% if rkey == region %}selected{% endif %}>{{ rname }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Bulan</label>
+        <input type="month" name="month" value="{{ month_str }}" onchange="this.form.submit()">
+      </div>
+      <a class="btn secondary" href="{{ url_for('attendance_entry', region=region) }}">+ Rekod Kehadiran</a>
+    </form>
+
+    <!-- Legend -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      {% for code, color in status_colors.items() %}
+        <span style="display:inline-flex;align-items:center;gap:5px;font:.8rem 'Trebuchet MS',sans-serif">
+          <span class="s-badge" style="background:{{ color }};color:{{ status_text[code] }}">{{ code }}</span>
+          {{ status_labels[code] }}
+        </span>
+      {% endfor %}
+    </div>
+
+    <div class="table-wrap" style="max-height:72vh">
+      <table class="grid-table">
+        <thead>
+          <tr>
+            <th class="col-no">#</th>
+            <th class="col-name" style="text-align:left">Nama</th>
+            <th class="col-desig" style="text-align:left">Jawatan</th>
+            {% for d in days %}
+              <th style="width:30px">
+                <div>{{ d }}</div>
+                <div class="day-abbr">{{ day_names[loop.index0] }}</div>
+              </th>
+            {% endfor %}
+            <th class="col-total" style="min-width:32px">P</th>
+            <th class="col-total">AL</th>
+            <th class="col-total">MC</th>
+            <th class="col-total">EML</th>
+            <th class="col-total">OD/RD</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for emp in employees %}
+          {% set emp_row = grid.get(emp.id, {}) %}
+          <tr>
+            <td class="col-no">{{ loop.index }}</td>
+            <td class="col-name">
+              <a href="{{ url_for('employee_edit', emp_id=emp.id) }}" style="color:var(--ink)">{{ emp.full_name }}</a>
+            </td>
+            <td class="col-desig" style="text-align:left">{{ emp.designation }}</td>
+            {% set counts = namespace(P=0,AL=0,MC=0,EML=0,OD=0,RD=0) %}
+            {% for d in days %}
+              {% set ds = '%s-%02d-%02d'|format(year, month, d) %}
+              {% set status = emp_row.get(d, '') %}
+              {% if status == 'P' %}{% set counts.P = counts.P + 1 %}
+              {% elif status == 'AL' %}{% set counts.AL = counts.AL + 1 %}
+              {% elif status == 'MC' %}{% set counts.MC = counts.MC + 1 %}
+              {% elif status == 'EML' %}{% set counts.EML = counts.EML + 1 %}
+              {% elif status == 'OD' %}{% set counts.OD = counts.OD + 1 %}
+              {% elif status == 'RD' %}{% set counts.RD = counts.RD + 1 %}
+              {% endif %}
+              <td class="{% if not status and ds in ph_dates %}ph-cell{% endif %}">
+                {% if status %}
+                  <a href="{{ url_for('attendance_edit', emp_id=emp.id, att_date=ds) }}" style="text-decoration:none">
+                    <span class="s-badge"
+                      style="background:{{ status_colors.get(status,'#eee') }};color:{{ status_text.get(status,'#333') }}">{{ status }}</span>
+                  </a>
+                {% elif ds in ph_dates %}
+                  <span class="s-badge" style="background:#fef9c3;color:#854d0e">PH</span>
+                {% else %}
+                  <a href="{{ url_for('attendance_edit', emp_id=emp.id, att_date=ds) }}"
+                     style="display:block;width:28px;height:20px;border-radius:5px;
+                            background:rgba(0,0,0,.04);color:var(--line);font-size:.65rem;
+                            text-decoration:none;display:flex;align-items:center;justify-content:center">·</a>
+                {% endif %}
+              </td>
+            {% endfor %}
+            <td class="col-total">{{ counts.P }}</td>
+            <td class="col-total">{{ counts.AL }}</td>
+            <td class="col-total">{{ counts.MC }}</td>
+            <td class="col-total">{{ counts.EML }}</td>
+            <td class="col-total">{{ counts.OD + counts.RD }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="{{ num_days + 8 }}" style="text-align:center;padding:28px;color:var(--muted)">
+            Tiada pekerja aktif untuk kawasan ini.
+          </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

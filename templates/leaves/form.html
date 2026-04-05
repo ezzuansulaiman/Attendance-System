@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>{% if is_staff %}Mohon Cuti{% else %}Permohonan Cuti{% endif %}</h1>
+    <p>
+      {% if is_staff %}
+        Lengkapkan maklumat di bawah untuk hantar permohonan cuti.
+      {% else %}
+        Isi maklumat permohonan cuti untuk pekerja yang dipilih.
+      {% endif %}
+    </p>
+  </div>
+  {% if is_staff %}
+    <div class="callout" style="max-width:360px">
+      <strong>Pemohon</strong>
+      <p>{{ emp.full_name }}{% if emp.designation %} | {{ emp.designation }}{% endif %}</p>
+    </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Borang Permohonan</h2>
+  </div>
+  <div class="panel-body">
+    <form method="post" class="grid">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+      <div class="form-grid">
+        {% if not is_staff %}
+          <div class="field">
+            <label for="employee_id">Pekerja</label>
+            <select id="employee_id" name="employee_id" required>
+              <option value="">Pilih pekerja</option>
+              {% for employee in employees %}
+                <option value="{{ employee.id }}">{{ employee.full_name }} - {{ employee.region|title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endif %}
+        <div class="field">
+          <label for="leave_type">Jenis Cuti</label>
+          <select id="leave_type" name="leave_type" required>
+            <option value="">Pilih jenis cuti</option>
+            {% for leave_type in leave_types %}
+              <option value="{{ leave_type }}">{{ leave_type }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="date_from">Tarikh Mula</label>
+          <input id="date_from" name="date_from" type="date" value="{{ today or '' }}" required>
+        </div>
+        <div class="field">
+          <label for="date_to">Tarikh Akhir</label>
+          <input id="date_to" name="date_to" type="date" value="{{ today or '' }}" required>
+        </div>
+      </div>
+      <div class="field">
+        <label for="reason">Sebab / Catatan</label>
+        <textarea id="reason" name="reason" placeholder="Nyatakan sebab permohonan cuti"></textarea>
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn">Hantar Permohonan</button>
+        {% if is_staff %}
+          <a class="btn secondary" href="{{ url_for('staff_portal') }}">Kembali ke Portal</a>
+        {% else %}
+          <a class="btn secondary" href="{{ url_for('leaves_list') }}">Kembali</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

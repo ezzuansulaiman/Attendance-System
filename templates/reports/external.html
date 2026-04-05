@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Attendance Summary — {{ region_name }} — {{ '%02d'|format(month) }}/{{ year }}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Calibri","Trebuchet MS",sans-serif;font-size:10pt;color:#111;background:#fff}
+    .page{padding:15mm 12mm}
+    .report-header{margin-bottom:14px}
+    .report-header h1{font-size:14pt;text-transform:uppercase;letter-spacing:.06em;
+      color:#1f493c;margin-bottom:4px}
+    .report-header h2{font-size:10pt;color:#555;margin-bottom:2px}
+    .report-header p{font-size:8.5pt;color:#888}
+    .sum-table{width:100%;border-collapse:collapse;font-size:9pt;margin-top:10px}
+    .sum-table th,.sum-table td{border:1px solid #bbb;padding:6px 8px;vertical-align:middle}
+    .sum-table thead tr:first-child th{background:#1f493c;color:#fff;font-size:9pt;
+      text-transform:uppercase;letter-spacing:.04em;text-align:center}
+    tbody tr:nth-child(even){background:#f5f8f5}
+    .sum-table td:first-child{text-align:center;width:36px}
+    .col-name{text-align:left!important;font-weight:700;min-width:160px}
+    .col-desig{text-align:left!important;min-width:120px;color:#555}
+    .col-num{text-align:center;width:64px}
+    .total-row td{background:#dce8dc!important;font-weight:700;border-top:2px solid #2d6954}
+    .sig-row{margin-top:20px;display:flex;justify-content:space-between;gap:60px;font-size:9pt}
+    .sig-block{flex:1;border-top:1px solid #999;padding-top:5px;text-align:center;color:#444}
+    .print-meta{font-size:7.5pt;color:#aaa;text-align:right;margin-top:8px}
+    @page{size:A4 portrait;margin:10mm}
+    @media print{body{font-size:9pt}.page{padding:0}}
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="report-header">
+    <h1>Attendance Summary</h1>
+    <h2>{{ region_name }} — {{ '%02d'|format(month) }}/{{ year }}</h2>
+    <p>Total days in month: {{ num_days }} &nbsp;|&nbsp; Print date: {{ print_date }}</p>
+  </div>
+
+  <table class="sum-table">
+    <thead>
+      <tr>
+        <th>No</th>
+        <th style="text-align:left">Name</th>
+        <th style="text-align:left">Designation</th>
+        <th class="col-num">Working Days (P)</th>
+        <th class="col-num">Annual Leave (AL)</th>
+        <th class="col-num">Sick Leave (MC)</th>
+        <th class="col-num">Emergency (EML)</th>
+        <th class="col-num">Public Holiday (PH)</th>
+        <th class="col-num">Off/Rest Day</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for emp in summary %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td class="col-name">{{ emp.full_name }}</td>
+        <td class="col-desig">{{ emp.designation }}</td>
+        <td class="col-num">{{ emp.get('P', 0) }}</td>
+        <td class="col-num">{{ emp.get('AL', 0) }}</td>
+        <td class="col-num">{{ emp.get('MC', 0) }}</td>
+        <td class="col-num">{{ emp.get('EML', 0) }}</td>
+        <td class="col-num">{{ emp.get('PH', 0) }}</td>
+        <td class="col-num">{{ (emp.get('OD', 0) or 0) + (emp.get('RD', 0) or 0) }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="total-row">
+        <td colspan="3">TOTAL</td>
+        <td class="col-num">{{ summary|sum(attribute='P') }}</td>
+        <td class="col-num">{{ summary|sum(attribute='AL') }}</td>
+        <td class="col-num">{{ summary|sum(attribute='MC') }}</td>
+        <td class="col-num">{{ summary|sum(attribute='EML') }}</td>
+        <td class="col-num">{{ summary|sum(attribute='PH') }}</td>
+        <td class="col-num">—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="sig-row">
+    <div class="sig-block">Prepared by<br><br>Name: _________________________<br>Date: ___________________</div>
+    <div class="sig-block">Verified by<br><br>Name: _________________________<br>Date: ___________________</div>
+  </div>
+
+  <div class="print-meta">{{ region_name }} | Attendance Summary | {{ '%02d'|format(month) }}/{{ year }}</div>
+</div>
+<script>window.onload=function(){window.print()}</script>
+</body>
+</html>
