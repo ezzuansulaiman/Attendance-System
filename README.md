@@ -30,6 +30,7 @@ ADMIN_PASSWORD=<kata-laluan-admin-kuat>
 TELEGRAM_BOT_TOKEN=<token-botfather>
 ADMIN_TELEGRAM_IDS=<id1,id2>
 ADMIN_TELEGRAM_GROUP_IDS=<group_id_optional>
+WORKER_TELEGRAM_GROUP_IDS=<group_id_optional>
 SESSION_COOKIE_SECURE=1
 PORT=8080
 ```
@@ -48,6 +49,7 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 TELEGRAM_BOT_TOKEN=<token-botfather>
 ADMIN_TELEGRAM_IDS=<id1,id2>
 ADMIN_TELEGRAM_GROUP_IDS=<group_id_optional>
+WORKER_TELEGRAM_GROUP_IDS=<group_id_optional>
 BOT_TIMEZONE=Asia/Kuala_Lumpur
 WORKDAY_START=07:00
 WORKDAY_END=17:30
@@ -62,6 +64,16 @@ link Telegram pada setiap hari Isnin hingga Jumaat, tepat pada `WORKDAY_START`.
 Notifikasi permohonan cuti boleh dihantar terus ke chat admin individu dan juga
 ke admin group. Dalam group, admin boleh gunakan butang inline `Luluskan` /
 `Tolak` terus pada mesej notifikasi.
+
+Jika anda mahu pekerja buat `check-in`, `check-out`, dan `apply cuti` terus
+dalam group Telegram, isi `WORKER_TELEGRAM_GROUP_IDS` dengan `chat_id` group
+pekerja tersebut. Bot akan benarkan aliran staf dalam group itu sahaja.
+
+Nota penting untuk mod group pekerja:
+
+- Respons bot akan kelihatan kepada ahli group.
+- Untuk aliran tarikh, alasan, dan gambar bukti dalam group berjalan lancar,
+  paling stabil jika privacy mode bot dimatikan melalui BotFather (`/setprivacy`).
 
 ## Kenapa PostgreSQL paling sesuai
 

@@ -31,6 +31,10 @@ def admin_chat_ids_from_env():
     return sorted(chat_ids)
 
 
+def worker_group_ids_from_env():
+    return sorted(set(_parse_signed_ids(os.getenv("WORKER_TELEGRAM_GROUP_IDS", ""))))
+
+
 def leave_approval_markup(lr_id):
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("Luluskan", callback_data=f"leave:approve:{lr_id}"),

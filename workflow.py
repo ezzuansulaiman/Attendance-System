@@ -65,9 +65,28 @@ def build_checkin_note(checkin_at=None):
     }
 
 
-def parse_checkin_note(notes):
+def build_checkout_note(existing_notes, checkout_at=None):
+    checkout_at = checkout_at or datetime.now()
+    checkout_time = checkout_at.strftime("%H:%M")
+    parsed = _parse_checkin_parts(existing_notes)
+    if "checkin" not in parsed:
+        raise ValueError(
+            "Rekod check-in hari ini tidak ditemui. Sila daftar hadir dahulu."
+        )
+    parsed["checkout"] = checkout_time
+    return {
+        "checkin_time": parsed["checkin"],
+        "checkout_time": checkout_time,
+        "cutoff_time": parsed.get("cutoff", LATE_CUTOFF_TIME),
+        "is_late": parsed.get("lateness") == "late",
+        "timing_label": "Lewat" if parsed.get("lateness") == "late" else "Tepat Masa",
+        "note": _serialize_checkin_parts(parsed),
+    }
+
+
+def _parse_checkin_parts(notes):
     if not notes or "checkin=" not in notes:
-        return None
+        return {}
 
     parsed = {}
     for part in notes.split(";"):
@@ -75,13 +94,32 @@ def parse_checkin_note(notes):
             continue
         key, value = part.split("=", 1)
         parsed[key.strip()] = value.strip()
+    return parsed
 
+
+def _serialize_checkin_parts(parts):
+    ordered_keys = ["checkin", "cutoff", "lateness", "checkout"]
+    serialized = []
+    for key in ordered_keys:
+        value = parts.get(key)
+        if value:
+            serialized.append(f"{key}={value}")
+    for key, value in parts.items():
+        if key in ordered_keys or not value:
+            continue
+        serialized.append(f"{key}={value}")
+    return ";".join(serialized)
+
+
+def parse_checkin_note(notes):
+    parsed = _parse_checkin_parts(notes)
     if "checkin" not in parsed:
         return None
 
     is_late = parsed.get("lateness") == "late"
     return {
         "checkin_time": parsed["checkin"],
+        "checkout_time": parsed.get("checkout"),
         "cutoff_time": parsed.get("cutoff", LATE_CUTOFF_TIME),
         "is_late": is_late,
         "timing_label": "Lewat" if is_late else "Tepat Masa",

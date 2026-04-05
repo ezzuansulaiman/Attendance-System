@@ -48,8 +48,9 @@ from supporting_docs import (build_telegram_supporting_doc,
                              leave_type_requires_supporting_doc,
                              parse_supporting_doc)
 from telegram_helpers import (admin_chat_ids_from_env, admin_user_ids_from_env,
-                              leave_approval_markup)
-from workflow import ANNUAL_LEAVE_NOTICE_DAYS, build_checkin_note, parse_checkin_note
+                              leave_approval_markup, worker_group_ids_from_env)
+from workflow import (ANNUAL_LEAVE_NOTICE_DAYS, build_checkin_note,
+                      build_checkout_note, parse_checkin_note)
 
 load_dotenv()
 
@@ -62,6 +63,7 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 ADMIN_IDS = admin_user_ids_from_env()
 ADMIN_CHAT_IDS = admin_chat_ids_from_env()
+WORKER_GROUP_IDS = worker_group_ids_from_env()
 BOT_TIMEZONE = os.getenv("BOT_TIMEZONE", "Asia/Kuala_Lumpur")
 WORKDAY_START = os.getenv("WORKDAY_START", "07:00")
 WORKDAY_END = os.getenv("WORKDAY_END", "17:30")
@@ -79,6 +81,7 @@ REG_NAME, REG_REGION = range(2)
 LEAVE_TYPE, LEAVE_FROM, LEAVE_TO, LEAVE_REASON, LEAVE_PROOF = range(4, 9)
 
 MENU_CHECKIN = "Hadir Hari Ini"
+MENU_CHECKOUT = "Balik / Check-out"
 MENU_LEAVE = "Tidak Hadir / Cuti"
 MENU_STATUS = "Status Bulan Ini"
 MENU_HELP = "Bantuan"
@@ -111,6 +114,44 @@ def _is_group_chat(update: Update) -> bool:
     return bool(chat and chat.type in {"group", "supergroup"})
 
 
+def _is_worker_group_chat(update: Update) -> bool:
+    chat = update.effective_chat
+    return bool(chat and chat.type in {"group", "supergroup"} and chat.id in WORKER_GROUP_IDS)
+
+
+def _staff_flow_allowed(update: Update) -> bool:
+    return not _is_group_chat(update) or _is_worker_group_chat(update)
+
+
+def _group_access_message(update: Update) -> str:
+    chat = update.effective_chat
+    chat_id = getattr(chat, "id", "")
+    if not WORKER_GROUP_IDS:
+        return (
+            "Mod group pekerja belum diaktifkan.\n"
+            "Isi <code>WORKER_TELEGRAM_GROUP_IDS</code> dalam .env untuk benarkan "
+            "check-in dan cuti dalam group.\n"
+            f"ID group ini: <code>{chat_id}</code>"
+        )
+    return (
+        "Group ini belum didaftarkan sebagai group pekerja.\n"
+        "Tambah ID group ini ke <code>WORKER_TELEGRAM_GROUP_IDS</code> atau guna "
+        "chat private dengan bot.\n"
+        f"ID group ini: <code>{chat_id}</code>"
+    )
+
+
+async def _ensure_staff_flow_allowed(update: Update) -> bool:
+    if _staff_flow_allowed(update):
+        return True
+    await update.message.reply_text(
+        _group_access_message(update),
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return False
+
+
 def _work_schedule_label() -> str:
     return f"{WORKDAY_START}-{WORKDAY_END}"
 
@@ -118,8 +159,9 @@ def _work_schedule_label() -> str:
 def _staff_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [
-            [MENU_CHECKIN, MENU_LEAVE],
-            [MENU_STATUS, MENU_HELP],
+            [MENU_CHECKIN, MENU_CHECKOUT],
+            [MENU_LEAVE, MENU_STATUS],
+            [MENU_HELP],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -129,9 +171,9 @@ def _staff_menu_keyboard() -> ReplyKeyboardMarkup:
 def _admin_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [
-            [MENU_CHECKIN, MENU_LEAVE],
-            [MENU_STATUS, MENU_PENDING],
-            [MENU_HELP],
+            [MENU_CHECKIN, MENU_CHECKOUT],
+            [MENU_LEAVE, MENU_STATUS],
+            [MENU_PENDING, MENU_HELP],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -357,6 +399,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     emp = db.get_employee_by_telegram(str(user.id))
 
+    if _is_group_chat(update) and not _staff_flow_allowed(update):
+        await update.message.reply_text(
+            _group_access_message(update),
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return ConversationHandler.END
+
     if emp:
         await update.message.reply_text(
             (
@@ -364,7 +414,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Jawatan: {emp['designation']} | "
                 f"Kawasan: {REGIONS.get(emp['region'], emp['region'])}\n"
                 f"Waktu kerja: {_work_schedule_label()} (Isnin hingga Jumaat)\n\n"
-                "Gunakan arahan /hadir, /cuti, atau /status."
+                "Gunakan arahan /hadir, /balik, /cuti, atau /status."
             ),
             parse_mode="HTML",
             reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
@@ -373,9 +423,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if _is_group_chat(update):
         await update.message.reply_text(
-            "Untuk pendaftaran kali pertama, sila chat bot ini secara private dan taip /start."
+            (
+                "Pendaftaran akan dibuat dalam group ini.\n"
+                "Semua jawapan anda selepas ini akan kelihatan kepada ahli group.\n\n"
+                "Sila masukkan <b>nama penuh</b> anda (seperti dalam IC)."
+            ),
+            parse_mode="HTML",
         )
-        return ConversationHandler.END
+        return REG_NAME
 
     await update.message.reply_text(
         (
@@ -390,6 +445,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def reg_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["reg_name"] = update.message.text.strip()
+    if _is_group_chat(update):
+        region_lines = "\n".join(f"- {region_name}" for region_name in REGIONS.values())
+        await update.message.reply_text(
+            "Pilih kawasan kerja anda dengan taip salah satu pilihan berikut:\n"
+            f"{region_lines}",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return REG_REGION
     keyboard = [[region_name] for region_name in REGIONS.values()]
     await update.message.reply_text(
         "Pilih kawasan kerja anda:",
@@ -442,8 +505,7 @@ async def reg_region(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Nama: <b>{emp['full_name']}</b>\n"
             f"Kawasan: {REGIONS.get(region_key, region_key)}\n"
             f"Waktu kerja: {_work_schedule_label()} (Isnin hingga Jumaat)\n\n"
-            "Butang menu telah diaktifkan. Tekan 'Hadir Hari Ini' untuk daftar "
-            "kehadiran pertama anda."
+            "Anda kini boleh guna /hadir, /balik, /cuti, dan /status."
         ),
         parse_mode="HTML",
         reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
@@ -460,6 +522,9 @@ async def reg_region(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_hadir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _ensure_staff_flow_allowed(update):
+        return
+
     emp = _get_emp(update)
     if not emp:
         await update.message.reply_text(
@@ -479,6 +544,8 @@ async def cmd_hadir(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"\nCheck-in: <b>{parsed_note['checkin_time']}</b> "
                 f"({parsed_note['timing_label']})"
             )
+            if parsed_note.get("checkout_time"):
+                timing += f"\nCheck-out: <b>{parsed_note['checkout_time']}</b>"
         await update.message.reply_text(
             (
                 "Kehadiran hari ini sudah direkod.\n"
@@ -512,16 +579,92 @@ async def cmd_hadir(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def cmd_balik(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _ensure_staff_flow_allowed(update):
+        return
+
+    emp = _get_emp(update)
+    if not emp:
+        await update.message.reply_text(
+            "Anda belum berdaftar atau akaun sudah tidak aktif. Sila taip /start.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
+    today = date.today()
+    existing = db.get_attendance(emp["id"], today)
+    if not existing:
+        await update.message.reply_text(
+            "Belum ada rekod hadir untuk hari ini. Sila guna /hadir dahulu.",
+            reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
+        )
+        return
+
+    if existing["status"] != "P":
+        label = STATUS_LABELS.get(existing["status"], existing["status"])
+        await update.message.reply_text(
+            (
+                "Check-out hanya untuk status Hadir (P).\n"
+                f"Status anda hari ini ialah <b>{existing['status']} - {label}</b>."
+            ),
+            parse_mode="HTML",
+            reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
+        )
+        return
+
+    parsed_note = parse_checkin_note(existing.get("notes"))
+    if parsed_note and parsed_note.get("checkout_time"):
+        await update.message.reply_text(
+            (
+                "Check-out hari ini sudah direkod.\n"
+                f"Check-in: <b>{parsed_note['checkin_time']}</b> "
+                f"({parsed_note['timing_label']})\n"
+                f"Check-out: <b>{parsed_note['checkout_time']}</b>"
+            ),
+            parse_mode="HTML",
+            reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
+        )
+        return
+
+    try:
+        checkout = build_checkout_note(
+            existing.get("notes"),
+            datetime.now(LOCAL_TZ).replace(tzinfo=None),
+        )
+    except Exception as exc:
+        await update.message.reply_text(
+            f"Ralat: {exc}",
+            reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
+        )
+        return
+
+    db.upsert_attendance(
+        emp["id"],
+        today,
+        "P",
+        notes=checkout["note"],
+        entered_by=f"bot:{update.effective_user.id}",
+    )
+    await update.message.reply_text(
+        (
+            "Check-out direkod.\n\n"
+            f"<b>{emp['full_name']}</b>\n"
+            f"Tarikh: {today.strftime('%d %B %Y')}\n"
+            f"Check-in: {checkout['checkin_time']} ({checkout['timing_label']})\n"
+            f"Check-out: {checkout['checkout_time']}"
+        ),
+        parse_mode="HTML",
+        reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
+    )
+
+
 async def cmd_cuti(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _ensure_staff_flow_allowed(update):
+        return ConversationHandler.END
+
     emp = _get_emp(update)
     if not emp:
         await update.message.reply_text("Sila /start untuk daftar dahulu.")
-        return ConversationHandler.END
-
-    if _is_group_chat(update):
-        await update.message.reply_text(
-            "Untuk jaga privasi sebab cuti dan gambar bukti, sila mohon cuti melalui chat private dengan bot ini."
-        )
         return ConversationHandler.END
 
     context.user_data["cuti_emp_id"] = emp["id"]
@@ -530,12 +673,18 @@ async def cmd_cuti(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("MC - Cuti Sakit", callback_data="MC")],
         [InlineKeyboardButton("EML - Cuti Kecemasan", callback_data="EML")],
     ]
+    group_notice = ""
+    if _is_group_chat(update):
+        group_notice = (
+            "\n\nPerhatian: permohonan dalam group akan kelihatan kepada ahli group."
+        )
     await update.message.reply_text(
         (
             "Pilih jenis cuti:\n"
             f"- AL perlu dipohon sekurang-kurangnya {ANNUAL_LEAVE_NOTICE_DAYS} hari lebih awal.\n"
             "- Jika tidak hadir pada hari yang sama, gunakan MC atau Cuti Kecemasan.\n"
             "- MC dan Cuti Kecemasan perlu disertakan gambar bukti."
+            f"{group_notice}"
         ),
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
@@ -630,9 +779,13 @@ async def leave_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["leave_reason"] = reason
 
     if leave_type_requires_supporting_doc(leave_type):
+        group_notice = ""
+        if _is_group_chat(update):
+            group_notice = " Gambar yang dihantar akan kelihatan dalam group ini."
         await update.message.reply_text(
             "Sila hantar gambar bukti sokongan untuk semakan kelulusan. "
             "Format: JPG, PNG, atau WEBP. Gambar akan kekal disimpan dalam Telegram sahaja."
+            f"{group_notice}"
         )
         return LEAVE_PROOF
 
@@ -659,6 +812,9 @@ async def leave_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_baki(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _ensure_staff_flow_allowed(update):
+        return
+
     emp = _get_emp(update)
     if not emp:
         await update.message.reply_text(
@@ -674,6 +830,9 @@ async def cmd_baki(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _ensure_staff_flow_allowed(update):
+        return
+
     emp = _get_emp(update)
     if not emp:
         await update.message.reply_text(
@@ -727,11 +886,20 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _is_group_chat(update) and not _staff_flow_allowed(update) and not _is_admin(update):
+        await update.message.reply_text(
+            _group_access_message(update),
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        return
+
     emp = _get_emp(update)
     is_admin = _is_admin(update)
     menu_text = (
         "<b>Menu Bot KHSAR</b>\n\n"
         f"{MENU_CHECKIN} - daftar hadir hari ini\n"
+        f"{MENU_CHECKOUT} - rekod masa balik hari ini\n"
         f"{MENU_LEAVE} - maklum tidak hadir atau hantar permohonan cuti\n"
         f"{MENU_STATUS} - semak rekod bulan ini\n"
         f"{MENU_HELP} - paparan bantuan ini\n"
@@ -740,8 +908,13 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         menu_text += f"{MENU_PENDING} - lihat permohonan cuti tertangguh\n"
     menu_text += (
         "\nJika lebih selesa guna arahan, anda juga boleh taip "
-        "/hadir, /cuti, /status, /cancel."
+        "/hadir, /balik, /cuti, /status, /cancel."
     )
+    if _is_worker_group_chat(update):
+        menu_text += (
+            "\n\nUntuk aliran group, pastikan bot boleh membaca balasan pengguna. "
+            "Tetapan paling stabil ialah matikan privacy mode melalui BotFather."
+        )
     await update.message.reply_text(
         menu_text,
         parse_mode="HTML",
@@ -930,6 +1103,10 @@ async def menu_checkin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await cmd_hadir(update, context)
 
 
+async def menu_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_balik(update, context)
+
+
 async def menu_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await cmd_cuti(update, context)
 
@@ -946,6 +1123,7 @@ async def _post_init(app_instance):
     commands = [
         BotCommand("start", "Buka menu utama"),
         BotCommand("hadir", "Daftar hadir hari ini"),
+        BotCommand("balik", "Rekod check-out hari ini"),
         BotCommand("cuti", "Mohon cuti"),
         BotCommand("status", "Semak rekod bulan ini"),
         BotCommand("help", "Lihat bantuan"),
@@ -997,6 +1175,7 @@ def main():
     application.add_handler(leave_handler)
     application.add_handler(CallbackQueryHandler(leave_action_callback, pattern="^leave:(approve|reject):\\d+$"))
     application.add_handler(CommandHandler("hadir", cmd_hadir))
+    application.add_handler(CommandHandler(["balik", "checkout"], cmd_balik))
     application.add_handler(CommandHandler("baki", cmd_baki))
     application.add_handler(CommandHandler("status", cmd_status))
     application.add_handler(CommandHandler("help", cmd_help))
@@ -1005,6 +1184,7 @@ def main():
     application.add_handler(CommandHandler("tolak", cmd_tolak))
     application.add_handler(CommandHandler("cancel", cmd_cancel))
     application.add_handler(MessageHandler(filters.Regex(f"^{MENU_CHECKIN}$"), menu_checkin))
+    application.add_handler(MessageHandler(filters.Regex(f"^{MENU_CHECKOUT}$"), menu_checkout))
     application.add_handler(MessageHandler(filters.Regex(f"^{MENU_LEAVE}$"), menu_leave))
     application.add_handler(MessageHandler(filters.Regex(f"^{MENU_STATUS}$"), menu_status))
     application.add_handler(MessageHandler(filters.Regex(f"^{MENU_HELP}$"), cmd_help))
