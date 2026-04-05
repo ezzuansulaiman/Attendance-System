@@ -36,8 +36,8 @@
   </div>
   <div class="hero-actions">
     <a class="btn" href="{{ url_for('report_internal_xlsx', region=region, month=month_str) }}">⬇ Laporan Dalaman (.xlsx)</a>
-    <a class="btn secondary" href="{{ url_for('report_external_xlsx', region=region, month=month_str) }}">⬇ Ringkasan Luaran (.xlsx)</a>
     <a class="btn secondary" href="{{ url_for('report_internal_print', region=region, month=month_str) }}" target="_blank">🖨 Cetak Dalaman</a>
+    <a class="btn secondary" href="{{ url_for('report_external_print', region=region, month=month_str) }}" target="_blank">🖨 Cetak Submission Luaran</a>
     <button class="btn secondary" onclick="window.print()">🖨 Cetak Grid</button>
   </div>
 </div>

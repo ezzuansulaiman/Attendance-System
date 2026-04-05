@@ -36,10 +36,10 @@
       {% if lr.supporting_doc %}
       <div class="callout" style="margin-bottom:18px">
         <strong>Bukti Sokongan</strong>
-        <p style="margin-bottom:12px">Lampiran gambar untuk semakan kelulusan.</p>
-        <a class="btn secondary" href="{{ url_for('leave_supporting_doc', filename=lr.supporting_doc) }}" target="_blank">Buka Gambar</a>
+        <p style="margin-bottom:12px">Lampiran gambar untuk semakan kelulusan. Bukti ini diambil terus dari Telegram dan tidak disimpan pada hosting.</p>
+        <a class="btn secondary" href="{{ url_for('leave_supporting_doc', lr_id=lr.id) }}" target="_blank">Buka Gambar</a>
         <div style="margin-top:14px">
-          <img src="{{ url_for('leave_supporting_doc', filename=lr.supporting_doc) }}" alt="Bukti sokongan" style="max-width:100%;border-radius:16px;border:1px solid var(--line)">
+          <img src="{{ url_for('leave_supporting_doc', lr_id=lr.id) }}" alt="Bukti sokongan" style="max-width:100%;border-radius:16px;border:1px solid var(--line)">
         </div>
       </div>
       {% endif %}

@@ -42,11 +42,11 @@ from telegram.ext import (
 
 import db
 from constants import DAY_ABBR_MS, LEAVE_TYPES, REGIONS, STATUS_LABELS
-from supporting_docs import (build_supporting_doc_name,
-                             ensure_supporting_doc_dir,
+from supporting_docs import (build_telegram_supporting_doc,
                              get_absolute_supporting_doc_path,
                              is_allowed_image,
-                             leave_type_requires_supporting_doc)
+                             leave_type_requires_supporting_doc,
+                             parse_supporting_doc)
 from telegram_helpers import (admin_chat_ids_from_env, admin_user_ids_from_env,
                               leave_approval_markup)
 from workflow import ANNUAL_LEAVE_NOTICE_DAYS, build_checkin_note, parse_checkin_note
@@ -165,10 +165,33 @@ def _build_leave_admin_message(leave_request, proof_line, reason):
     )
 
 
-async def _notify_admins(app, message: str, photo_path=None, reply_markup=None):
+async def _notify_admins(app, message: str, supporting_doc=None, reply_markup=None):
+    supporting_doc_meta = parse_supporting_doc(supporting_doc)
     for admin_id in ADMIN_CHAT_IDS:
         try:
-            if photo_path and os.path.exists(photo_path):
+            if (
+                supporting_doc_meta
+                and supporting_doc_meta.get("storage") == "telegram"
+                and supporting_doc_meta.get("file_id")
+            ):
+                if supporting_doc_meta.get("kind") == "document":
+                    await app.bot.send_document(
+                        chat_id=admin_id,
+                        document=supporting_doc_meta["file_id"],
+                        caption=message,
+                        parse_mode="HTML",
+                        reply_markup=reply_markup,
+                    )
+                else:
+                    await app.bot.send_photo(
+                        chat_id=admin_id,
+                        photo=supporting_doc_meta["file_id"],
+                        caption=message,
+                        parse_mode="HTML",
+                        reply_markup=reply_markup,
+                    )
+            elif supporting_doc:
+                photo_path = get_absolute_supporting_doc_path(supporting_doc)
                 with open(photo_path, "rb") as proof_stream:
                     await app.bot.send_photo(
                         chat_id=admin_id,
@@ -220,31 +243,36 @@ async def _process_leave_action(context, lr_id, action, reviewed_by):
     return leave_request
 
 
-async def _download_supporting_doc(update, context, leave_type):
+async def _capture_supporting_doc(update):
     message = update.message
-    telegram_file = None
-    source_name = "proof.jpg"
 
     if message.photo:
-        telegram_file = await message.photo[-1].get_file()
-        source_name = "proof.jpg"
-    elif message.document:
-        if not is_allowed_image(message.document.file_name, message.document.mime_type):
+        photo = message.photo[-1]
+        return build_telegram_supporting_doc(
+            kind="photo",
+            file_id=photo.file_id,
+            file_unique_id=photo.file_unique_id,
+            chat_id=message.chat_id,
+            message_id=message.message_id,
+            file_name="proof.jpg",
+            mime_type="image/jpeg",
+        )
+
+    if message.document:
+        document = message.document
+        if not is_allowed_image(document.file_name, document.mime_type):
             raise ValueError("Hanya gambar JPG, PNG, atau WEBP dibenarkan.")
-        telegram_file = await message.document.get_file()
-        source_name = message.document.file_name or "proof.jpg"
+        return build_telegram_supporting_doc(
+            kind="document",
+            file_id=document.file_id,
+            file_unique_id=document.file_unique_id,
+            chat_id=message.chat_id,
+            message_id=message.message_id,
+            file_name=document.file_name or "proof.jpg",
+            mime_type=document.mime_type or "image/jpeg",
+        )
 
-    if not telegram_file:
-        raise ValueError("Sila hantar gambar bukti dalam bentuk foto atau fail imej.")
-
-    filename = build_supporting_doc_name(
-        leave_type,
-        context.user_data["cuti_emp_id"],
-        source_name,
-    )
-    target_path = os.path.join(ensure_supporting_doc_dir(), filename)
-    await telegram_file.download_to_drive(custom_path=target_path)
-    return filename
+    raise ValueError("Sila hantar gambar bukti dalam bentuk foto atau fail imej.")
 
 
 async def _finalize_leave_request(update, context, reason, supporting_doc=None):
@@ -277,18 +305,11 @@ async def _finalize_leave_request(update, context, reason, supporting_doc=None):
         reply_markup=_main_menu_markup(update=update, emp=emp, is_admin=_is_admin(update)),
     )
 
-    photo_path = None
-    if supporting_doc:
-        try:
-            photo_path = get_absolute_supporting_doc_path(supporting_doc)
-        except ValueError:
-            photo_path = None
-
     leave_request = db.get_leave_request(lr_id)
     await _notify_admins(
         context.application,
         _build_leave_admin_message(leave_request, proof_line, reason),
-        photo_path=photo_path,
+        supporting_doc=supporting_doc,
         reply_markup=leave_approval_markup(lr_id),
     )
 
@@ -610,7 +631,8 @@ async def leave_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if leave_type_requires_supporting_doc(leave_type):
         await update.message.reply_text(
-            "Sila hantar gambar bukti sokongan untuk semakan kelulusan. Format: JPG, PNG, atau WEBP."
+            "Sila hantar gambar bukti sokongan untuk semakan kelulusan. "
+            "Format: JPG, PNG, atau WEBP. Gambar akan kekal disimpan dalam Telegram sahaja."
         )
         return LEAVE_PROOF
 
@@ -627,7 +649,7 @@ async def leave_proof(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reason = context.user_data.get("leave_reason", "")
 
     try:
-        supporting_doc = await _download_supporting_doc(update, context, leave_type)
+        supporting_doc = await _capture_supporting_doc(update)
         return await _finalize_leave_request(update, context, reason, supporting_doc)
     except Exception as exc:
         await update.message.reply_text(

@@ -7,6 +7,7 @@ Staff portal:     /portal        (login required, role=staff)
 
 import calendar
 import asyncio
+import io
 import os
 import secrets
 from datetime import date, datetime
@@ -14,18 +15,18 @@ from functools import wraps
 from html import escape
 
 from flask import (Flask, flash, redirect, render_template, request,
-                   send_file, send_from_directory, session, url_for)
+                   abort, send_file, send_from_directory, session, url_for)
 
 import db
 import reports
 from constants import (DAY_ABBR_MS, DESIGNATIONS, LEAVE_TYPES, REGIONS,
                        STATUS_CODES, STATUS_COLORS, STATUS_LABELS,
                        STATUS_TEXT_COLORS)
-from supporting_docs import (build_supporting_doc_name,
-                             ensure_supporting_doc_dir,
+from supporting_docs import (build_telegram_supporting_doc,
                              get_absolute_supporting_doc_path,
                              is_allowed_image,
-                             leave_type_requires_supporting_doc)
+                             leave_type_requires_supporting_doc,
+                             parse_supporting_doc)
 from telegram_helpers import admin_chat_ids_from_env, leave_approval_markup
 from workflow import (ANNUAL_LEAVE_NOTICE_DAYS, build_checkin_note,
                       parse_checkin_note)
@@ -70,15 +71,61 @@ def _save_supporting_doc(file_storage, leave_type, employee_id):
         return None
     if not is_allowed_image(file_storage.filename, file_storage.mimetype):
         raise ValueError("Hanya fail gambar JPG, PNG, atau WEBP dibenarkan.")
-
-    filename = build_supporting_doc_name(
-        leave_type,
-        employee_id,
-        file_storage.filename,
+    return asyncio.run(
+        _upload_supporting_doc_to_telegram(file_storage, leave_type, employee_id)
     )
-    target_dir = ensure_supporting_doc_dir()
-    file_storage.save(os.path.join(target_dir, filename))
-    return filename
+
+
+async def _upload_supporting_doc_to_telegram(file_storage, leave_type, employee_id):
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    admin_ids = admin_chat_ids_from_env()
+    if not token or not admin_ids:
+        raise ValueError(
+            "Tetapan Telegram belum lengkap. Isi TELEGRAM_BOT_TOKEN dan "
+            "ADMIN_TELEGRAM_IDS atau ADMIN_TELEGRAM_GROUP_IDS."
+        )
+
+    from telegram import Bot
+
+    caption = (
+        f"Simpanan bukti sokongan\n"
+        f"Pekerja ID: {employee_id}\n"
+        f"Jenis cuti: {leave_type}"
+    )
+    proof_stream = file_storage.stream
+    try:
+        proof_stream.seek(0)
+    except Exception:
+        pass
+
+    bot = Bot(token=token)
+    try:
+        message = await bot.send_document(
+            chat_id=admin_ids[0],
+            document=proof_stream,
+            caption=caption,
+            filename=file_storage.filename or "proof.jpg",
+        )
+        if not message.document:
+            raise ValueError("Telegram tidak memulangkan maklumat dokumen bukti.")
+        document = message.document
+        return build_telegram_supporting_doc(
+            kind="document",
+            file_id=document.file_id,
+            file_unique_id=document.file_unique_id,
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            file_name=file_storage.filename or "proof.jpg",
+            mime_type=file_storage.mimetype or "image/jpeg",
+        )
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(
+            "Gagal memuat naik gambar bukti ke Telegram. Sila cuba lagi."
+        ) from exc
+    finally:
+        await bot.close()
 
 
 def _build_leave_admin_message(leave_request):
@@ -112,23 +159,50 @@ def _notify_admins_via_telegram(leave_request):
 
         bot = Bot(token=token)
         message = _build_leave_admin_message(leave_request)
-        photo_path = None
-        if leave_request.get("supporting_doc"):
-            try:
-                photo_path = get_absolute_supporting_doc_path(
-                    leave_request["supporting_doc"]
-                )
-            except ValueError:
-                photo_path = None
+        supporting_doc = parse_supporting_doc(leave_request.get("supporting_doc"))
 
         for chat_id in admin_ids:
             try:
-                if photo_path and os.path.exists(photo_path):
-                    with open(photo_path, "rb") as proof_stream:
+                if supporting_doc and supporting_doc.get("storage") == "telegram":
+                    media_kind = supporting_doc.get("kind")
+                    if media_kind == "document":
+                        await bot.send_document(
+                            chat_id=chat_id,
+                            document=supporting_doc["file_id"],
+                            caption=message,
+                            parse_mode="HTML",
+                            reply_markup=leave_approval_markup(leave_request["id"]),
+                        )
+                    else:
                         await bot.send_photo(
                             chat_id=chat_id,
-                            photo=proof_stream,
+                            photo=supporting_doc["file_id"],
                             caption=message,
+                            parse_mode="HTML",
+                            reply_markup=leave_approval_markup(leave_request["id"]),
+                        )
+                elif leave_request.get("supporting_doc"):
+                    try:
+                        photo_path = get_absolute_supporting_doc_path(
+                            leave_request["supporting_doc"]
+                        )
+                    except ValueError:
+                        photo_path = None
+                    if photo_path and os.path.exists(photo_path):
+                        with open(photo_path, "rb") as proof_stream:
+                            await bot.send_photo(
+                                chat_id=chat_id,
+                                photo=proof_stream,
+                                caption=message,
+                                parse_mode="HTML",
+                                reply_markup=leave_approval_markup(
+                                    leave_request["id"]
+                                ),
+                            )
+                    else:
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=message,
                             parse_mode="HTML",
                             reply_markup=leave_approval_markup(leave_request["id"]),
                         )
@@ -410,11 +484,50 @@ def leave_detail(lr_id):
                            status_labels=STATUS_LABELS)
 
 
-@app.route("/leaves/docs/<path:filename>")
+async def _download_supporting_doc_from_telegram(stored_value):
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    supporting_doc = parse_supporting_doc(stored_value)
+    if not token or not supporting_doc or supporting_doc.get("storage") != "telegram":
+        return None, None
+
+    from telegram import Bot
+
+    bot = Bot(token=token)
+    try:
+        telegram_file = await bot.get_file(supporting_doc["file_id"])
+        payload = await telegram_file.download_as_bytearray()
+        return bytes(payload), supporting_doc
+    finally:
+        await bot.close()
+
+
+@app.route("/leaves/docs/<int:lr_id>")
 @admin_required
-def leave_supporting_doc(filename):
-    ensure_supporting_doc_dir()
-    return send_from_directory(ensure_supporting_doc_dir(), filename)
+def leave_supporting_doc(lr_id):
+    lr = db.get_leave_request(lr_id)
+    if not lr or not lr.get("supporting_doc"):
+        abort(404)
+
+    supporting_doc = parse_supporting_doc(lr["supporting_doc"])
+    if supporting_doc and supporting_doc.get("storage") == "telegram":
+        payload, metadata = asyncio.run(
+            _download_supporting_doc_from_telegram(lr["supporting_doc"])
+        )
+        if not payload or not metadata:
+            abort(404)
+        return send_file(
+            io.BytesIO(payload),
+            mimetype=metadata.get("mime_type") or "image/jpeg",
+            download_name=metadata.get("file_name") or "proof.jpg",
+        )
+
+    if supporting_doc and supporting_doc.get("storage") == "legacy_local":
+        filepath = get_absolute_supporting_doc_path(supporting_doc["stored_name"])
+        directory = os.path.dirname(filepath)
+        filename = os.path.basename(filepath)
+        return send_from_directory(directory, filename)
+
+    abort(404)
 
 
 @app.route("/leaves/<int:lr_id>/approve", methods=["POST"])
@@ -683,21 +796,6 @@ def report_internal_xlsx():
                      download_name=filename,
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-
-@app.route("/reports/external.xlsx")
-@admin_required
-def report_external_xlsx():
-    region = request.args.get("region", list(REGIONS)[0])
-    month_str = request.args.get("month", date.today().strftime("%Y-%m"))
-    year, month = _parse_month(month_str)
-    buf = reports.build_external_xlsx(region, year, month)
-    region_name = REGIONS.get(region, region).replace(" ", "_")
-    filename = f"Attendance_Summary_{region_name}_{year}-{month:02d}.xlsx"
-    return send_file(buf, as_attachment=True,
-                     download_name=filename,
-                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-
 @app.route("/reports/internal/print")
 @admin_required
 def report_internal_print():
@@ -732,14 +830,24 @@ def report_external_print():
     region = request.args.get("region", list(REGIONS)[0])
     month_str = request.args.get("month", date.today().strftime("%Y-%m"))
     year, month = _parse_month(month_str)
-    summary = db.get_month_summary(region, year, month)
     num_days = _month_days(year, month)
+    employees, grid = db.get_month_grid(region, year, month)
+    days = list(range(1, num_days + 1))
+    day_names = [_day_of_week(year, month, d) for d in days]
+    ph_dates = db.get_public_holiday_dates(year, month)
 
     return render_template("reports/external.html",
         region=region,
         region_name=REGIONS.get(region, region),
-        year=year, month=month,
-        summary=summary,
+        year=year,
+        month=month,
+        employees=employees,
+        grid=grid,
+        days=days,
+        day_names=day_names,
+        ph_dates=ph_dates,
+        status_colors=STATUS_COLORS,
+        status_labels=STATUS_LABELS,
         num_days=num_days,
         print_date=date.today().strftime("%d %B %Y"),
     )

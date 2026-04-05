@@ -27,6 +27,9 @@ SERVICE_MODE=web
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 FLASK_SECRET_KEY=<nilai-rawak-panjang>
 ADMIN_PASSWORD=<kata-laluan-admin-kuat>
+TELEGRAM_BOT_TOKEN=<token-botfather>
+ADMIN_TELEGRAM_IDS=<id1,id2>
+ADMIN_TELEGRAM_GROUP_IDS=<group_id_optional>
 SESSION_COOKIE_SECURE=1
 PORT=8080
 ```
@@ -49,6 +52,10 @@ BOT_TIMEZONE=Asia/Kuala_Lumpur
 WORKDAY_START=07:00
 WORKDAY_END=17:30
 ```
+
+Nota:
+
+- Gambar bukti sokongan tidak disimpan pada hosting. Sistem hanya menyimpan rujukan Telegram (`file_id`) dalam database dan akan memuatkan semula gambar dari Telegram bila admin semak.
 
 Bot akan hantar peringatan check-in automatik kepada pekerja aktif yang telah
 link Telegram pada setiap hari Isnin hingga Jumaat, tepat pada `WORKDAY_START`.

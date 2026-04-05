@@ -1,5 +1,6 @@
-"""Helpers for validating and storing leave supporting images."""
+"""Helpers for validating leave supporting images and Telegram-backed metadata."""
 
+import json
 import os
 from datetime import datetime
 
@@ -49,3 +50,46 @@ def get_absolute_supporting_doc_path(stored_name):
     if not abs_path.startswith(docs_root):
         raise ValueError("Laluan dokumen sokongan tidak sah.")
     return abs_path
+
+
+def build_telegram_supporting_doc(
+    *,
+    kind,
+    file_id,
+    file_unique_id="",
+    chat_id=None,
+    message_id=None,
+    file_name="proof.jpg",
+    mime_type="image/jpeg",
+):
+    payload = {
+        "storage": "telegram",
+        "kind": kind,
+        "file_id": file_id,
+        "file_unique_id": file_unique_id or "",
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "file_name": file_name or "proof.jpg",
+        "mime_type": mime_type or "image/jpeg",
+    }
+    return json.dumps(payload, separators=(",", ":"), ensure_ascii=True)
+
+
+def parse_supporting_doc(stored_value):
+    if not stored_value:
+        return None
+    try:
+        payload = json.loads(stored_value)
+    except (TypeError, ValueError):
+        return {
+            "storage": "legacy_local",
+            "stored_name": str(stored_value),
+            "file_name": os.path.basename(str(stored_value)) or "proof.jpg",
+            "mime_type": "image/jpeg",
+        }
+
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("storage") != "telegram" or not payload.get("file_id"):
+        return None
+    return payload
