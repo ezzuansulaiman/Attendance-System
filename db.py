@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 
 from constants import LEAVE_DEFAULTS, LEAVE_TYPES, REGIONS, STATUS_CODES
+from supporting_docs import leave_type_requires_supporting_doc
 from workflow import validate_leave_request
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -498,7 +499,8 @@ def get_month_summary(region, year, month):
 # ─── Leave Requests ───────────────────────────────────────────────────────────
 
 def insert_leave_request(employee_id, leave_type, date_from, date_to,
-                         reason=None, supporting_doc=None):
+                         reason=None, supporting_doc=None,
+                         validate_supporting_doc=True):
     if leave_type not in LEAVE_TYPES:
         raise ValueError("Jenis cuti tidak sah")
     start_date = _parse_iso_date(date_from, "Tarikh mula")
@@ -508,7 +510,7 @@ def insert_leave_request(employee_id, leave_type, date_from, date_to,
     validate_leave_request(
         leave_type,
         start_date,
-        supporting_doc_present=bool(supporting_doc),
+        supporting_doc_present=bool(supporting_doc) or not validate_supporting_doc,
     )
     with _get_conn() as conn:
         if USE_POSTGRES:
@@ -527,6 +529,15 @@ def insert_leave_request(employee_id, leave_type, date_from, date_to,
         """, (employee_id, leave_type, start_date.isoformat(),
               end_date.isoformat(), reason, supporting_doc))
         return cur.lastrowid
+
+
+def update_leave_supporting_doc(lr_id, supporting_doc):
+    with _get_conn() as conn:
+        _run(conn, """
+            UPDATE leave_requests
+            SET supporting_doc=?
+            WHERE id=?
+        """, (supporting_doc, lr_id))
 
 
 def get_leave_requests(status=None, region=None, year=None, month=None,
@@ -582,6 +593,10 @@ def approve_leave(lr_id, reviewed_by, notes=None):
         raise ValueError("Leave request already approved")
     if lr["status"] == "rejected":
         raise ValueError("Leave request already rejected")
+    if leave_type_requires_supporting_doc(lr["leave_type"]) and not lr.get("supporting_doc"):
+        raise ValueError(
+            "Permohonan ini memerlukan gambar bukti sebelum boleh diluluskan."
+        )
 
     d = date.fromisoformat(lr["date_from"])
     end = date.fromisoformat(lr["date_to"])

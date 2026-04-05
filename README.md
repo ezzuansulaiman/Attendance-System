@@ -72,8 +72,11 @@ pekerja tersebut. Bot akan benarkan aliran staf dalam group itu sahaja.
 Nota penting untuk mod group pekerja:
 
 - Respons bot akan kelihatan kepada ahli group.
-- Untuk aliran tarikh, alasan, dan gambar bukti dalam group berjalan lancar,
-  paling stabil jika privacy mode bot dimatikan melalui BotFather (`/setprivacy`).
+- Permohonan cuti dalam group guna format satu arahan seperti
+  `/cuti AL 15/04/2026 16/04/2026 urusan keluarga`.
+- Jika jenis `MC` atau `EML`, bot akan terus minta pekerja lampirkan gambar
+  bukti sebaik sahaja permohonan dihantar.
+- Bila admin lulus atau tolak, bot akan maklumkan semula status ke group pekerja.
 
 ## Kenapa PostgreSQL paling sesuai
 
