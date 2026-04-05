@@ -439,6 +439,18 @@ def get_attendance(employee_id, record_date):
             (employee_id, str(record_date)))
 
 
+def get_attendance_range(employee_id, date_from, date_to):
+    start_date = _parse_iso_date(date_from, "Tarikh mula").isoformat()
+    end_date = _parse_iso_date(date_to, "Tarikh akhir").isoformat()
+    with _get_conn() as conn:
+        return _fetchall(conn, """
+            SELECT *
+            FROM attendance
+            WHERE employee_id=? AND record_date BETWEEN ? AND ?
+            ORDER BY record_date
+        """, (employee_id, start_date, end_date))
+
+
 def delete_attendance_by_leave(leave_id):
     tag = f"leave_req:{leave_id}"
     with _get_conn() as conn:
@@ -568,6 +580,21 @@ def approve_leave(lr_id, reviewed_by, notes=None):
     d = date.fromisoformat(lr["date_from"])
     end = date.fromisoformat(lr["date_to"])
     tag = f"leave_req:{lr_id}"
+    existing_rows = get_attendance_range(lr["employee_id"], d, end)
+    conflicts = [
+        row for row in existing_rows
+        if row.get("notes") != tag and row.get("status") != lr["leave_type"]
+    ]
+    if conflicts:
+        conflict_text = ", ".join(
+            f"{row['record_date']} ({row['status']})" for row in conflicts[:5]
+        )
+        if len(conflicts) > 5:
+            conflict_text += ", ..."
+        raise ValueError(
+            "Permohonan cuti tidak boleh diluluskan kerana sudah ada rekod "
+            f"kehadiran pada tarikh ini: {conflict_text}"
+        )
     days_written = 0
     while d <= end:
         upsert_attendance(lr["employee_id"], d, lr["leave_type"],

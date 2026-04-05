@@ -8,21 +8,18 @@ if not exist .env (
     pause
 )
 
-REM Install dependencies if needed
-pip show flask >nul 2>&1 || pip install -r requirements.txt
+REM Install/update dependencies from requirements
+py -3 -m pip install -r requirements.txt
 
 echo.
 echo ============================================
 echo   KHSAR Attendance System
 echo ============================================
 echo   Web Dashboard : http://localhost:8080
-echo   Telegram Bot  : running in background
+echo   Telegram Bot  : running together
 echo ============================================
 echo.
 
-REM Start Telegram bot in background
-start "KHSAR Bot" cmd /c "set SERVICE_MODE=bot && python main.py & pause"
-
-REM Start web app (foreground)
-set SERVICE_MODE=web
-python main.py
+REM Start web + bot together
+set SERVICE_MODE=all
+py -3 main.py

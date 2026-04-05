@@ -17,12 +17,14 @@ Admin commands:
 import calendar
 import logging
 import os
-from datetime import date
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    BotCommand,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
     Update,
@@ -54,9 +56,40 @@ ADMIN_IDS = {
     for x in os.getenv("ADMIN_TELEGRAM_IDS", "").split(",")
     if x.strip().isdigit()
 }
+BOT_TIMEZONE = os.getenv("BOT_TIMEZONE", "Asia/Kuala_Lumpur")
+WORKDAY_START = os.getenv("WORKDAY_START", "07:00")
+WORKDAY_END = os.getenv("WORKDAY_END", "17:30")
+
+try:
+    LOCAL_TZ = ZoneInfo(BOT_TIMEZONE)
+except Exception:
+    LOCAL_TZ = timezone(timedelta(hours=8))
+    logger.warning(
+        "Zon masa %s tidak tersedia, guna UTC+08:00 sebagai gantian.",
+        BOT_TIMEZONE,
+    )
 
 REG_NAME, REG_REGION = range(2)
 LEAVE_TYPE, LEAVE_FROM, LEAVE_TO, LEAVE_REASON = range(4, 8)
+
+MENU_CHECKIN = "Hadir Hari Ini"
+MENU_LEAVE = "Mohon Cuti"
+MENU_STATUS = "Status Bulan Ini"
+MENU_HELP = "Bantuan"
+MENU_PENDING = "Semak Permohonan"
+
+
+def _parse_local_time(value: str, fallback: str) -> time:
+    raw = (value or fallback).strip()
+    try:
+        hour_str, minute_str = raw.split(":", 1)
+        return time(hour=int(hour_str), minute=int(minute_str), tzinfo=LOCAL_TZ)
+    except Exception:
+        hour_str, minute_str = fallback.split(":", 1)
+        return time(hour=int(hour_str), minute=int(minute_str), tzinfo=LOCAL_TZ)
+
+
+REMINDER_TIME = _parse_local_time(WORKDAY_START, "07:00")
 
 
 def _is_admin(update: Update) -> bool:
@@ -65,6 +98,41 @@ def _is_admin(update: Update) -> bool:
 
 def _get_emp(update: Update):
     return db.get_employee_by_telegram(str(update.effective_user.id))
+
+
+def _work_schedule_label() -> str:
+    return f"{WORKDAY_START}-{WORKDAY_END}"
+
+
+def _staff_menu_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        [
+            [MENU_CHECKIN, MENU_LEAVE],
+            [MENU_STATUS, MENU_HELP],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+def _admin_menu_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        [
+            [MENU_CHECKIN, MENU_LEAVE],
+            [MENU_STATUS, MENU_PENDING],
+            [MENU_HELP],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+def _main_menu_markup(emp=None, is_admin=False):
+    if is_admin:
+        return _admin_menu_keyboard()
+    if emp:
+        return _staff_menu_keyboard()
+    return ReplyKeyboardRemove()
 
 
 async def _notify_admins(app, message: str):
@@ -79,6 +147,41 @@ async def _notify_admins(app, message: str):
             logger.warning("Gagal hantar notifikasi ke admin %s: %s", admin_id, exc)
 
 
+async def _send_daily_checkin_reminder(context: ContextTypes.DEFAULT_TYPE):
+    today = datetime.now(LOCAL_TZ).date()
+    if today.weekday() > 4:
+        return
+
+    employees = db.get_employees(active_only=True)
+    sent = 0
+    for emp in employees:
+        telegram_id = (emp.get("telegram_id") or "").strip()
+        if not telegram_id:
+            continue
+        if db.get_attendance(emp["id"], today):
+            continue
+        try:
+            await context.bot.send_message(
+                chat_id=int(telegram_id),
+                text=(
+                    "Peringatan kehadiran harian.\n\n"
+                    f"Waktu kerja hari ini: {_work_schedule_label()}\n"
+                    "Hari bekerja: Isnin hingga Jumaat\n"
+                    "Sila daftar hadir sekarang dengan /hadir."
+                ),
+            )
+            sent += 1
+        except Exception as exc:
+            logger.warning(
+                "Gagal hantar peringatan ke pekerja %s (%s): %s",
+                emp["id"],
+                telegram_id,
+                exc,
+            )
+
+    logger.info("Peringatan check-in dihantar kepada %s pekerja untuk %s", sent, today)
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     emp = db.get_employee_by_telegram(str(user.id))
@@ -88,13 +191,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             (
                 f"Selamat kembali, <b>{emp['full_name']}</b>!\n\n"
                 f"Jawatan: {emp['designation']} | "
-                f"Kawasan: {REGIONS.get(emp['region'], emp['region'])}\n\n"
-                "Perintah tersedia:\n"
-                "/hadir - Daftar hadir hari ini\n"
-                "/cuti - Mohon cuti\n"
-                "/status - Kehadiran bulan ini"
+                f"Kawasan: {REGIONS.get(emp['region'], emp['region'])}\n"
+                f"Waktu kerja: {_work_schedule_label()} (Isnin hingga Jumaat)\n\n"
+                "Gunakan butang menu di bawah untuk daftar hadir, mohon cuti, "
+                "atau semak status bulanan."
             ),
             parse_mode="HTML",
+            reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
         )
         return ConversationHandler.END
 
@@ -161,14 +264,13 @@ async def reg_region(update: Update, context: ContextTypes.DEFAULT_TYPE):
         (
             "Pendaftaran berjaya.\n\n"
             f"Nama: <b>{emp['full_name']}</b>\n"
-            f"Kawasan: {REGIONS.get(region_key, region_key)}\n\n"
-            "Anda kini boleh menggunakan:\n"
-            "/hadir - Daftar hadir hari ini\n"
-            "/cuti - Mohon cuti\n"
-            "/status - Kehadiran bulan ini"
+            f"Kawasan: {REGIONS.get(region_key, region_key)}\n"
+            f"Waktu kerja: {_work_schedule_label()} (Isnin hingga Jumaat)\n\n"
+            "Butang menu telah diaktifkan. Tekan 'Hadir Hari Ini' untuk daftar "
+            "kehadiran pertama anda."
         ),
         parse_mode="HTML",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
     )
 
     await _notify_admins(
@@ -185,7 +287,8 @@ async def cmd_hadir(update: Update, context: ContextTypes.DEFAULT_TYPE):
     emp = _get_emp(update)
     if not emp:
         await update.message.reply_text(
-            "Anda belum berdaftar atau akaun sudah tidak aktif. Sila taip /start."
+            "Anda belum berdaftar atau akaun sudah tidak aktif. Sila taip /start.",
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
 
@@ -200,6 +303,7 @@ async def cmd_hadir(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Tarikh: {today.strftime('%d/%m/%Y')}"
             ),
             parse_mode="HTML",
+            reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
         )
         return
 
@@ -217,6 +321,7 @@ async def cmd_hadir(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Status: Hadir (P)"
         ),
         parse_mode="HTML",
+        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
     )
 
 
@@ -334,6 +439,7 @@ async def leave_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Sila tunggu kelulusan daripada penyelia."
         ),
         parse_mode="HTML",
+        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
     )
 
     await _notify_admins(
@@ -354,18 +460,25 @@ async def leave_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_baki(update: Update, context: ContextTypes.DEFAULT_TYPE):
     emp = _get_emp(update)
     if not emp:
-        await update.message.reply_text("Sila /start untuk daftar dahulu.")
+        await update.message.reply_text(
+            "Sila /start untuk daftar dahulu.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
         return
 
     await update.message.reply_text(
-        "Semakan baki cuti tidak dipaparkan melalui bot. Sila hubungi penyelia jika perlu."
+        "Semakan baki cuti tidak dipaparkan melalui bot. Sila hubungi penyelia jika perlu.",
+        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
     )
 
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     emp = _get_emp(update)
     if not emp:
-        await update.message.reply_text("Sila /start untuk daftar dahulu.")
+        await update.message.reply_text(
+            "Sila /start untuk daftar dahulu.",
+            reply_markup=ReplyKeyboardRemove(),
+        )
         return
 
     today = date.today()
@@ -405,7 +518,34 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"OD/RD={counts['OD'] + counts['RD']}"
     )
 
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
+    )
+
+
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    emp = _get_emp(update)
+    is_admin = _is_admin(update)
+    menu_text = (
+        "<b>Menu Bot KHSAR</b>\n\n"
+        f"{MENU_CHECKIN} - daftar hadir hari ini\n"
+        f"{MENU_LEAVE} - hantar permohonan cuti\n"
+        f"{MENU_STATUS} - semak rekod bulan ini\n"
+        f"{MENU_HELP} - paparan bantuan ini\n"
+    )
+    if is_admin:
+        menu_text += f"{MENU_PENDING} - lihat permohonan cuti tertangguh\n"
+    menu_text += (
+        "\nJika lebih selesa guna arahan, anda juga boleh taip "
+        "/hadir, /cuti, /status, /cancel."
+    )
+    await update.message.reply_text(
+        menu_text,
+        parse_mode="HTML",
+        reply_markup=_main_menu_markup(emp=emp, is_admin=is_admin),
+    )
 
 
 async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -414,7 +554,13 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     requests = db.get_leave_requests(status="pending", limit=20)
     if not requests:
-        await update.message.reply_text("Tiada permohonan cuti tertangguh.")
+        await update.message.reply_text(
+            "Tiada permohonan cuti tertangguh.",
+            reply_markup=_main_menu_markup(
+                emp=_get_emp(update),
+                is_admin=True,
+            ),
+        )
         return
 
     lines = ["<b>Permohonan Cuti Tertangguh:</b>\n"]
@@ -428,7 +574,11 @@ async def cmd_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"  /lulus {leave_request['id']}  /tolak {leave_request['id']}\n"
             )
         )
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+    )
 
 
 async def cmd_lulus(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -437,7 +587,10 @@ async def cmd_lulus(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     args = context.args
     if not args or not args[0].isdigit():
-        await update.message.reply_text("Guna: /lulus <id>")
+        await update.message.reply_text(
+            "Guna: /lulus <id>",
+            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+        )
         return
 
     lr_id = int(args[0])
@@ -451,6 +604,7 @@ async def cmd_lulus(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"({leave_request['date_from']} hingga {leave_request['date_to']})"
             ),
             parse_mode="HTML",
+            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
         )
         if leave_request.get("telegram_id"):
             try:
@@ -465,7 +619,10 @@ async def cmd_lulus(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
     except Exception as exc:
-        await update.message.reply_text(f"Ralat: {exc}")
+        await update.message.reply_text(
+            f"Ralat: {exc}",
+            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+        )
 
 
 async def cmd_tolak(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -474,7 +631,10 @@ async def cmd_tolak(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     args = context.args
     if not args or not args[0].isdigit():
-        await update.message.reply_text("Guna: /tolak <id>")
+        await update.message.reply_text(
+            "Guna: /tolak <id>",
+            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+        )
         return
 
     lr_id = int(args[0])
@@ -487,6 +647,7 @@ async def cmd_tolak(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"<b>{leave_request['full_name']}</b> - {leave_request['leave_type']}"
             ),
             parse_mode="HTML",
+            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
         )
         if leave_request.get("telegram_id"):
             try:
@@ -502,22 +663,62 @@ async def cmd_tolak(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
     except Exception as exc:
-        await update.message.reply_text(f"Ralat: {exc}")
+        await update.message.reply_text(
+            f"Ralat: {exc}",
+            reply_markup=_main_menu_markup(emp=_get_emp(update), is_admin=True),
+        )
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
+    emp = _get_emp(update)
     await update.message.reply_text(
-        "Dibatalkan. Taip /start untuk mulakan semula.",
-        reply_markup=ReplyKeyboardRemove(),
+        "Dibatalkan. Anda boleh pilih semula daripada menu di bawah.",
+        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
     )
     return ConversationHandler.END
 
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    emp = _get_emp(update)
     await update.message.reply_text(
-        "Perintah tidak dikenali. Cuba:\n/hadir /cuti /status"
+        "Pilihan tidak dikenali. Gunakan butang menu di bawah atau taip /help.",
+        reply_markup=_main_menu_markup(emp=emp, is_admin=_is_admin(update)),
     )
+
+
+async def menu_checkin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_hadir(update, context)
+
+
+async def menu_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_cuti(update, context)
+
+
+async def menu_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_status(update, context)
+
+
+async def menu_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_pending(update, context)
+
+
+async def _post_init(app_instance):
+    commands = [
+        BotCommand("start", "Buka menu utama"),
+        BotCommand("hadir", "Daftar hadir hari ini"),
+        BotCommand("cuti", "Mohon cuti"),
+        BotCommand("status", "Semak rekod bulan ini"),
+        BotCommand("help", "Lihat bantuan"),
+        BotCommand("cancel", "Batalkan proses semasa"),
+    ]
+    if ADMIN_IDS:
+        commands.extend([
+            BotCommand("pending", "Lihat permohonan tertangguh"),
+            BotCommand("lulus", "Luluskan permohonan cuti"),
+            BotCommand("tolak", "Tolak permohonan cuti"),
+        ])
+    await app_instance.bot.set_my_commands(commands)
 
 
 def main():
@@ -527,7 +728,7 @@ def main():
 
     db.init_db()
 
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_TOKEN).post_init(_post_init).build()
 
     reg_handler = ConversationHandler(
         entry_points=[CommandHandler("start", cmd_start)],
@@ -554,13 +755,36 @@ def main():
     application.add_handler(CommandHandler("hadir", cmd_hadir))
     application.add_handler(CommandHandler("baki", cmd_baki))
     application.add_handler(CommandHandler("status", cmd_status))
+    application.add_handler(CommandHandler("help", cmd_help))
     application.add_handler(CommandHandler("pending", cmd_pending))
     application.add_handler(CommandHandler("lulus", cmd_lulus))
     application.add_handler(CommandHandler("tolak", cmd_tolak))
     application.add_handler(CommandHandler("cancel", cmd_cancel))
+    application.add_handler(MessageHandler(filters.Regex(f"^{MENU_CHECKIN}$"), menu_checkin))
+    application.add_handler(MessageHandler(filters.Regex(f"^{MENU_LEAVE}$"), menu_leave))
+    application.add_handler(MessageHandler(filters.Regex(f"^{MENU_STATUS}$"), menu_status))
+    application.add_handler(MessageHandler(filters.Regex(f"^{MENU_HELP}$"), cmd_help))
+    application.add_handler(MessageHandler(filters.Regex(f"^{MENU_PENDING}$"), menu_pending))
     application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
     logger.info("Bot dimulakan - menunggu mesej...")
+    if application.job_queue is None:
+        logger.warning(
+            "Job queue tidak tersedia. Pasang dependency baru untuk aktifkan "
+            "peringatan check-in automatik."
+        )
+    else:
+        application.job_queue.run_daily(
+            _send_daily_checkin_reminder,
+            time=REMINDER_TIME,
+            days=(0, 1, 2, 3, 4),
+            name="daily-checkin-reminder",
+        )
+        logger.info(
+            "Peringatan check-in dijadualkan pada %s (%s), Isnin hingga Jumaat",
+            WORKDAY_START,
+            BOT_TIMEZONE,
+        )
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

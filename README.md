@@ -17,7 +17,7 @@ Kedua-dua service app boleh guna repo yang sama.
 Untuk `attendance-web`:
 
 ```bash
-python main.py
+py -3 main.py
 ```
 
 Variables:
@@ -34,7 +34,7 @@ PORT=8080
 Untuk `attendance-bot`:
 
 ```bash
-python main.py
+py -3 main.py
 ```
 
 Variables:
@@ -44,7 +44,13 @@ SERVICE_MODE=bot
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 TELEGRAM_BOT_TOKEN=<token-botfather>
 ADMIN_TELEGRAM_IDS=<id1,id2>
+BOT_TIMEZONE=Asia/Kuala_Lumpur
+WORKDAY_START=07:00
+WORKDAY_END=17:30
 ```
+
+Bot akan hantar peringatan check-in automatik kepada pekerja aktif yang telah
+link Telegram pada setiap hari Isnin hingga Jumaat, tepat pada `WORKDAY_START`.
 
 ## Kenapa PostgreSQL paling sesuai
 
@@ -58,16 +64,29 @@ Rujukan Railway:
 
 ## Local run
 
+Web + Bot serentak:
+
+```bash
+set SERVICE_MODE=all
+py -3 main.py
+```
+
+Atau terus guna:
+
+```bash
+start.bat
+```
+
 Web:
 
 ```bash
 set SERVICE_MODE=web
-python main.py
+py -3 main.py
 ```
 
 Bot:
 
 ```bash
 set SERVICE_MODE=bot
-python main.py
+py -3 main.py
 ```
