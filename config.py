@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -36,6 +37,13 @@ def _get_env_int(name: str, default: int) -> int:
     return int(raw_value) if raw_value else default
 
 
+def _get_env_bool(name: str, default: bool) -> bool:
+    raw_value = _get_env(name)
+    if not raw_value:
+        return default
+    return raw_value.lower() in {"1", "true", "yes", "on"}
+
+
 def _split_ints(raw_value: str) -> tuple[int, ...]:
     values: list[int] = []
     for chunk in raw_value.split(","):
@@ -62,6 +70,25 @@ def _normalize_database_url(raw_value: str) -> str:
     return value
 
 
+def _parse_clock_time(name: str, default: str) -> time:
+    raw_value = _get_env(name, default)
+    try:
+        hour_text, minute_text = raw_value.split(":", 1)
+        parsed = time(hour=int(hour_text), minute=int(minute_text))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must use HH:MM 24-hour format.") from exc
+    return parsed.replace(second=0, microsecond=0)
+
+
+def _parse_weekdays(name: str, default: str) -> tuple[int, ...]:
+    parsed = tuple(dict.fromkeys(_split_ints(_get_env(name, default))))
+    if not parsed:
+        raise ValueError(f"{name} must include at least one weekday number.")
+    if any(day < 0 or day > 6 for day in parsed):
+        raise ValueError(f"{name} must only contain weekday numbers from 0 (Monday) to 6 (Sunday).")
+    return parsed
+
+
 @dataclass(frozen=True)
 class Settings:
     app_env: str
@@ -80,6 +107,10 @@ class Settings:
     company_name: str
     default_site_name: str
     annual_leave_notice_days: int
+    attendance_reminders_enabled: bool
+    attendance_checkin_reminder_time: time
+    attendance_checkout_reminder_time: time
+    attendance_reminder_workdays: tuple[int, ...]
 
     @property
     def bot_enabled(self) -> bool:
@@ -142,6 +173,10 @@ def get_settings() -> Settings:
         company_name=_get_env("COMPANY_NAME", "Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.") or "Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.",
         default_site_name=_get_env("DEFAULT_SITE_NAME", "Sepang") or "Sepang",
         annual_leave_notice_days=_get_env_int("ANNUAL_LEAVE_NOTICE_DAYS", 5),
+        attendance_reminders_enabled=_get_env_bool("ATTENDANCE_REMINDERS_ENABLED", True),
+        attendance_checkin_reminder_time=_parse_clock_time("ATTENDANCE_CHECKIN_REMINDER_TIME", "08:00"),
+        attendance_checkout_reminder_time=_parse_clock_time("ATTENDANCE_CHECKOUT_REMINDER_TIME", "17:00"),
+        attendance_reminder_workdays=_parse_weekdays("ATTENDANCE_REMINDER_WORKDAYS", "0,1,2,3,4"),
     )
     settings.validate()
     return settings

@@ -9,6 +9,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.bot_handlers import router, set_bot_commands
+from bot.reminders import run_attendance_reminder_loop
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -32,9 +33,12 @@ async def run_bot_polling() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dispatcher = build_dispatcher()
+    reminder_task = asyncio.create_task(run_attendance_reminder_loop(bot), name="attendance-reminders")
 
     await set_bot_commands(bot)
     try:
         await dispatcher.start_polling(bot, allowed_updates=dispatcher.resolve_used_update_types())
     finally:
+        reminder_task.cancel()
+        await asyncio.gather(reminder_task, return_exceptions=True)
         await bot.session.close()

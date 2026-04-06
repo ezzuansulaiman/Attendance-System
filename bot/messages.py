@@ -15,6 +15,20 @@ def worker_menu_text() -> str:
     )
 
 
+def build_attendance_reminder_text(reminder_type: str) -> str:
+    if reminder_type == "checkin":
+        return (
+            "<b>Reminder Check-In</b>\n"
+            "Selamat bekerja team. Kalau anda bertugas hari ini, jangan lupa tekan <b>Check-In</b>."
+        )
+    if reminder_type == "checkout":
+        return (
+            "<b>Reminder Check-Out</b>\n"
+            "Kalau kerja hari ini sudah selesai, jangan lupa tekan <b>Check-Out</b> sebelum balik."
+        )
+    raise ValueError(f"Unsupported attendance reminder type: {reminder_type}")
+
+
 def registration_intro_text() -> str:
     return (
         "<b>First-Time Registration</b>\n"
