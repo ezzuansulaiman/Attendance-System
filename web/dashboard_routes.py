@@ -28,9 +28,9 @@ async def dashboard(request: Request, site_id: Optional[int] = None) -> Response
         sites = await list_sites(session, active_only=True)
 
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
         {
-            "request": request,
             "summary": summary,
             "today": today,
             "recent_records": recent_records,

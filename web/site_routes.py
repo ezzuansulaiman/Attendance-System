@@ -21,8 +21,9 @@ async def sites(request: Request) -> Response:
     async with session_scope() as session:
         site_items = await list_sites(session)
     return templates.TemplateResponse(
+        request,
         "sites.html",
-        {"request": request, "sites": site_items, "site": None, "error": None},
+        {"sites": site_items, "site": None, "error": None},
     )
 
 
@@ -50,8 +51,9 @@ async def sites_create(
         except SiteError as exc:
             site_items = await list_sites(session)
             return templates.TemplateResponse(
+                request,
                 "sites.html",
-                {"request": request, "sites": site_items, "site": None, "error": str(exc)},
+                {"sites": site_items, "site": None, "error": str(exc)},
                 status_code=400,
             )
     return RedirectResponse(url=request.url_for("sites"), status_code=303)
@@ -67,8 +69,9 @@ async def sites_edit(request: Request, site_id: int) -> Response:
         site = await get_site_by_id(session, site_id)
         site_items = await list_sites(session)
     return templates.TemplateResponse(
+        request,
         "sites.html",
-        {"request": request, "sites": site_items, "site": site, "error": None},
+        {"sites": site_items, "site": site, "error": None},
     )
 
 
@@ -101,8 +104,9 @@ async def sites_update(
         except SiteError as exc:
             site_items = await list_sites(session)
             return templates.TemplateResponse(
+                request,
                 "sites.html",
-                {"request": request, "sites": site_items, "site": site, "error": str(exc)},
+                {"sites": site_items, "site": site, "error": str(exc)},
                 status_code=400,
             )
     return RedirectResponse(url=request.url_for("sites"), status_code=303)

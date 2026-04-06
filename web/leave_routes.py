@@ -29,8 +29,9 @@ async def leaves(request: Request, site_id: Optional[int] = None) -> Response:
         leave_items = await list_leave_requests(session, site_id=site_id)
         sites = await list_sites(session)
     return templates.TemplateResponse(
+        request,
         "leaves.html",
-        {"request": request, "leaves": leave_items, "sites": sites, "selected_site_id": site_id},
+        {"leaves": leave_items, "sites": sites, "selected_site_id": site_id},
     )
 
 

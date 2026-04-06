@@ -61,7 +61,7 @@ async def attendance(
 
     selected_month, selected_year = _period_context(month, year)
     context = await _attendance_page_context(month=selected_month, year=selected_year, site_id=site_id)
-    return templates.TemplateResponse("attendance.html", {"request": request, "error": None, **context})
+    return templates.TemplateResponse(request, "attendance.html", {"error": None, **context})
 
 
 @router.get("/{record_id}/edit", response_class=HTMLResponse, name="attendance_edit")
@@ -83,7 +83,7 @@ async def attendance_edit(
         record_id=record_id,
         site_id=site_id,
     )
-    return templates.TemplateResponse("attendance.html", {"request": request, "error": None, **context})
+    return templates.TemplateResponse(request, "attendance.html", {"error": None, **context})
 
 
 @router.post("", name="attendance_create")
@@ -113,8 +113,9 @@ async def attendance_create(
         selected_month, selected_year = _period_context(None, None)
         context = await _attendance_page_context(month=selected_month, year=selected_year)
         return templates.TemplateResponse(
+            request,
             "attendance.html",
-            {"request": request, "error": str(exc), **context},
+            {"error": str(exc), **context},
             status_code=400,
         )
     return RedirectResponse(url=request.url_for("attendance"), status_code=303)
@@ -154,8 +155,9 @@ async def attendance_update(
         selected_month, selected_year = _period_context(None, None)
         context = await _attendance_page_context(month=selected_month, year=selected_year, record_id=record_id)
         return templates.TemplateResponse(
+            request,
             "attendance.html",
-            {"request": request, "error": str(exc), **context},
+            {"error": str(exc), **context},
             status_code=400,
         )
     return RedirectResponse(url=request.url_for("attendance"), status_code=303)
