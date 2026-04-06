@@ -20,6 +20,7 @@ from models import session_scope
 from services.attendance_service import get_worker_by_telegram_id
 from services.leave_service import (
     LeaveError,
+    annual_leave_notice_text,
     create_leave_request,
     get_leave_request,
     is_supported_leave_type,
@@ -151,9 +152,11 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
 
     await state.update_data(leave_type=leave_type)
     await state.set_state(LeaveApplicationStates.start_date)
-    await callback.message.answer(
-        f"{leave_label(leave_type)} selected.\nSend the start date in YYYY-MM-DD or DD/MM/YYYY format."
-    )
+    prompt_lines = [f"{leave_label(leave_type)} selected."]
+    if leave_type == "annual":
+        prompt_lines.append(annual_leave_notice_text())
+    prompt_lines.append("Send the start date in YYYY-MM-DD or DD/MM/YYYY format.")
+    await callback.message.answer("\n".join(prompt_lines))
 
 
 @router.message(LeaveApplicationStates.start_date)

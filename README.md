@@ -37,6 +37,7 @@ PORT=8000
 TIMEZONE=Asia/Kuala_Lumpur
 COMPANY_NAME=Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.
 DEFAULT_SITE_NAME=Sepang
+ANNUAL_LEAVE_NOTICE_DAYS=5
 
 ADMIN_WEB_USERNAME=admin
 ADMIN_WEB_PASSWORD=<strong_admin_password>
@@ -57,6 +58,7 @@ Notes:
 - The app already converts `postgres://...` into the SQLAlchemy-compatible async format automatically.
 - `GROUP_ID` is an optional fallback Telegram worker group if a site does not have its own Telegram group configured.
 - `DEFAULT_SITE_NAME` is the first site auto-created during DB initialization.
+- `ANNUAL_LEAVE_NOTICE_DAYS` controls how many days in advance Annual Leave must be submitted.
 - `SQLITE_PATH` is only useful for local development, not Railway production.
 
 ## What To Put In Railway
@@ -72,6 +74,7 @@ PORT=8000
 TIMEZONE=Asia/Kuala_Lumpur
 COMPANY_NAME=Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.
 DEFAULT_SITE_NAME=Sepang
+ANNUAL_LEAVE_NOTICE_DAYS=5
 ADMIN_WEB_USERNAME=admin
 ADMIN_WEB_PASSWORD=use-a-strong-password-here
 SESSION_SECRET=use-a-long-random-secret-here

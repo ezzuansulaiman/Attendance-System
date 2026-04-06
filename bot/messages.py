@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from services.leave_service import leave_label
+from services.leave_service import annual_leave_notice_text, leave_label
 
 
 def worker_menu_text() -> str:
@@ -10,6 +10,7 @@ def worker_menu_text() -> str:
         "<b>Attendance Menu</b>\n"
         "Use the buttons below inside the worker group.\n\n"
         "Registered workers can check in, check out, and apply leave.\n"
+        f"{annual_leave_notice_text()}\n"
         "MC and Emergency Leave will ask for a photo, and only the Telegram <code>file_id</code> is stored."
     )
 

@@ -61,6 +61,7 @@ class Settings:
     session_secret: str
     company_name: str
     default_site_name: str
+    annual_leave_notice_days: int
 
     @property
     def bot_enabled(self) -> bool:
@@ -87,4 +88,5 @@ def get_settings() -> Settings:
         session_secret=_get_env("SESSION_SECRET", "change-me-please") or "change-me-please",
         company_name=_get_env("COMPANY_NAME", "Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.") or "Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.",
         default_site_name=_get_env("DEFAULT_SITE_NAME", "Sepang") or "Sepang",
+        annual_leave_notice_days=_get_env_int("ANNUAL_LEAVE_NOTICE_DAYS", 5),
     )

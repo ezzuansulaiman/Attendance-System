@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from config import get_settings
 from models.models import LeaveRequest, Worker
 
 REQUIRES_PHOTO = {"mc", "emergency"}
@@ -21,6 +22,7 @@ LEAVE_REPORT_CODES = {
     "mc": "MC",
     "emergency": "EL",
 }
+settings = get_settings()
 
 
 class LeaveError(ValueError):
@@ -41,6 +43,17 @@ def leave_label(leave_type: str) -> str:
 
 def leave_report_code(leave_type: str) -> str:
     return LEAVE_REPORT_CODES.get(leave_type, leave_type.upper())
+
+
+def annual_leave_notice_days() -> int:
+    return max(0, settings.annual_leave_notice_days)
+
+
+def annual_leave_notice_text() -> str:
+    days = annual_leave_notice_days()
+    if days == 1:
+        return "Annual Leave must be applied at least 1 day before the start date."
+    return f"Annual Leave must be applied at least {days} days before the start date."
 
 
 def _clean_notes(value: Optional[str]) -> Optional[str]:
@@ -82,6 +95,11 @@ async def create_leave_request(
         raise LeaveError("Unsupported leave type.")
     if end_date < start_date:
         raise LeaveError("End date cannot be earlier than start date.")
+    if leave_type == "annual":
+        today = datetime.now(settings.local_timezone).date()
+        notice_days = annual_leave_notice_days()
+        if notice_days and (start_date - today).days < notice_days:
+            raise LeaveError(annual_leave_notice_text())
     if leave_requires_photo(leave_type) and not telegram_file_id:
         raise LeaveError("A Telegram photo is required for this leave type.")
 
