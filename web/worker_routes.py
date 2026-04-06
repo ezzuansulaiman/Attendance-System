@@ -23,8 +23,9 @@ async def workers(request: Request) -> Response:
         worker_items = await list_workers(session)
         sites = await list_sites(session)
     return templates.TemplateResponse(
+        request,
         "workers.html",
-        {"request": request, "workers": worker_items, "worker": None, "sites": sites, "error": None},
+        {"workers": worker_items, "worker": None, "sites": sites, "error": None},
     )
 
 
@@ -57,8 +58,9 @@ async def workers_create(
             worker_items = await list_workers(session)
             sites = await list_sites(session)
             return templates.TemplateResponse(
+                request,
                 "workers.html",
-                {"request": request, "workers": worker_items, "worker": None, "sites": sites, "error": str(exc)},
+                {"workers": worker_items, "worker": None, "sites": sites, "error": str(exc)},
                 status_code=400,
             )
     return RedirectResponse(url=request.url_for("workers"), status_code=303)
@@ -75,8 +77,9 @@ async def workers_edit(request: Request, worker_id: int) -> Response:
         worker_items = await list_workers(session)
         sites = await list_sites(session)
     return templates.TemplateResponse(
+        request,
         "workers.html",
-        {"request": request, "workers": worker_items, "worker": worker, "sites": sites, "error": None},
+        {"workers": worker_items, "worker": worker, "sites": sites, "error": None},
     )
 
 
@@ -114,8 +117,9 @@ async def workers_update(
             worker_items = await list_workers(session)
             sites = await list_sites(session)
             return templates.TemplateResponse(
+                request,
                 "workers.html",
-                {"request": request, "workers": worker_items, "worker": worker, "sites": sites, "error": str(exc)},
+                {"workers": worker_items, "worker": worker, "sites": sites, "error": str(exc)},
                 status_code=400,
             )
     return RedirectResponse(url=request.url_for("workers"), status_code=303)

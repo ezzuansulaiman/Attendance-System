@@ -12,7 +12,7 @@ router = APIRouter()
 
 @router.get("/login", response_class=HTMLResponse, name="login")
 async def login(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(request, "login.html", {"error": None})
 
 
 @router.post("/login", name="login_post")
@@ -25,8 +25,9 @@ async def login_post(
     valid_password = secrets.compare_digest(password, settings.web_password)
     if not (valid_user and valid_password):
         return templates.TemplateResponse(
+            request,
             "login.html",
-            {"request": request, "error": "Invalid credentials."},
+            {"error": "Invalid credentials."},
             status_code=400,
         )
     request.session["is_admin"] = True
