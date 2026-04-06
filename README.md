@@ -28,6 +28,7 @@ Recommended Railway setup:
 Set these variables on the app service:
 
 ```env
+APP_ENV=production
 BOT_TOKEN=<telegram bot token from BotFather>
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 ADMIN_IDS=<telegram_admin_id_1,telegram_admin_id_2>
@@ -41,7 +42,7 @@ DEFAULT_SITE_NAME=Sepang
 ANNUAL_LEAVE_NOTICE_DAYS=5
 
 ADMIN_WEB_USERNAME=admin
-ADMIN_WEB_PASSWORD=<strong_admin_password>
+ADMIN_WEB_PASSWORD_HASH=<pbkdf2_sha256 hash>
 SESSION_SECRET=<long_random_secret>
 ```
 
@@ -59,15 +60,24 @@ Notes:
 - The app already converts `postgres://...` into the SQLAlchemy-compatible async format automatically.
 - `GROUP_ID` is an optional fallback Telegram worker group if a site does not have its own Telegram group configured.
 - `WEB_BASE_URL` is the public root URL of your deployed web app, used to show an `Open Admin Web` button in Telegram `/admin`.
+- `APP_ENV=production` enables stricter startup checks and secure session cookies.
 - `DEFAULT_SITE_NAME` is the first site auto-created during DB initialization.
 - `ANNUAL_LEAVE_NOTICE_DAYS` controls how many days in advance Annual Leave must be submitted.
+- `ADMIN_WEB_PASSWORD_HASH` is required for production web login.
 - `SQLITE_PATH` is only useful for local development, not Railway production.
+
+Generate a production password hash with:
+
+```bash
+py -3 -c "from web.security import hash_password; print(hash_password('your-password'))"
+```
 
 ## What To Put In Railway
 
 Use values like these:
 
 ```env
+APP_ENV=production
 BOT_TOKEN=1234567890:AAExampleFromBotFather
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 ADMIN_IDS=232621401
@@ -79,7 +89,7 @@ COMPANY_NAME=Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.
 DEFAULT_SITE_NAME=Sepang
 ANNUAL_LEAVE_NOTICE_DAYS=5
 ADMIN_WEB_USERNAME=admin
-ADMIN_WEB_PASSWORD=use-a-strong-password-here
+ADMIN_WEB_PASSWORD_HASH=pbkdf2_sha256$390000$replace-with-generated-salt$replace-with-generated-hash
 SESSION_SECRET=use-a-long-random-secret-here
 ```
 
@@ -113,8 +123,9 @@ Your local `.env` currently contains a real Telegram bot token and a weak admin 
 
 1. Regenerate the Telegram bot token in BotFather.
 2. Replace `ADMIN_WEB_PASSWORD` with a strong value.
-3. Replace `SESSION_SECRET` with a long random secret.
-4. Do not commit `.env` to GitHub.
+3. Prefer `ADMIN_WEB_PASSWORD_HASH` for any deployed environment.
+4. Replace `SESSION_SECRET` with a long random secret.
+5. Do not commit `.env` to GitHub.
 
 ## Local Run
 
@@ -129,6 +140,7 @@ Web admin access:
 - Open `http://localhost:8000/`
 - If you are not logged in, the app redirects to `/login`
 - Sign in using `ADMIN_WEB_USERNAME` and `ADMIN_WEB_PASSWORD`
+- For local-only setups, plaintext `ADMIN_WEB_PASSWORD` still works. Production requires `ADMIN_WEB_PASSWORD_HASH`.
 - If `WEB_BASE_URL` is configured, Telegram admins can also open the login page directly from `/admin` > `Open Admin Web`
 
 The app will:

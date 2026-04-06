@@ -6,12 +6,13 @@
     <div class="error">{{ error }}</div>
     {% endif %}
     <form method="post" action="{{ request.url_for('attendance_update', record_id=record.id) if record else request.url_for('attendance_create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
         <div class="form-grid">
             <label>
                 Worker
                 <select name="worker_id" required>
                     {% for worker_item in workers %}
-                    <option value="{{ worker_item.id }}" {% if record and record.worker_id == worker_item.id %}selected{% endif %}>
+                    <option value="{{ worker_item.id }}" {% if form_data.get('worker_id') == worker_item.id or (not form_data and record and record.worker_id == worker_item.id) %}selected{% endif %}>
                         {{ worker_item.full_name }}
                     </option>
                     {% endfor %}
@@ -19,20 +20,20 @@
             </label>
             <label>
                 Attendance Date
-                <input type="date" name="attendance_date" value="{{ record.attendance_date.isoformat() if record else '' }}" required>
+                <input type="date" name="attendance_date" value="{{ form_data.get('attendance_date', record.attendance_date.isoformat() if record else '') }}" required>
             </label>
             <label>
                 Check-In
-                <input type="datetime-local" name="check_in_at" value="{{ record.check_in_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_in_at else '' }}">
+                <input type="datetime-local" name="check_in_at" value="{{ form_data.get('check_in_at', record.check_in_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_in_at else '') }}">
             </label>
             <label>
                 Check-Out
-                <input type="datetime-local" name="check_out_at" value="{{ record.check_out_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_out_at else '' }}">
+                <input type="datetime-local" name="check_out_at" value="{{ form_data.get('check_out_at', record.check_out_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_out_at else '') }}">
             </label>
         </div>
         <label style="display:block; margin-top: 12px;">
             Notes
-            <textarea name="notes">{{ record.notes if record else '' }}</textarea>
+            <textarea name="notes">{{ form_data.get('notes', record.notes if record else '') }}</textarea>
         </label>
         <div class="actions" style="margin-top: 14px;">
             <button type="submit">{{ 'Update Record' if record else 'Save Record' }}</button>
@@ -84,6 +85,7 @@
                     <td class="actions">
                         <a class="button secondary" href="{{ request.url_for('attendance_edit', record_id=item.id) }}">Edit</a>
                         <form method="post" action="{{ request.url_for('attendance_delete', record_id=item.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
                             <button class="button danger" type="submit">Delete</button>
                         </form>
                     </td>

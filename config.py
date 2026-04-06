@@ -11,6 +11,21 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+INSECURE_PASSWORD_VALUES = {
+    "",
+    "change-me",
+    "change-me-now",
+    "replace-with-strong-password",
+    "use-a-strong-password-here",
+}
+INSECURE_SESSION_SECRET_VALUES = {
+    "",
+    "change-me-please",
+    "change-this-secret",
+    "replace-with-long-random-secret",
+    "use-a-long-random-secret",
+}
+
 
 def _get_env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
@@ -49,6 +64,7 @@ def _normalize_database_url(raw_value: str) -> str:
 
 @dataclass(frozen=True)
 class Settings:
+    app_env: str
     bot_token: str
     database_url: str
     admin_ids: tuple[int, ...]
@@ -59,6 +75,7 @@ class Settings:
     port: int
     web_username: str
     web_password: str
+    web_password_hash: str
     session_secret: str
     company_name: str
     default_site_name: str
@@ -73,6 +90,10 @@ class Settings:
         return ZoneInfo(self.timezone)
 
     @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() in {"production", "prod"}
+
+    @property
     def admin_web_login_url(self) -> Optional[str]:
         if not self.web_base_url:
             return None
@@ -81,11 +102,31 @@ class Settings:
             return base_url
         return f"{base_url}/login"
 
+    @property
+    def session_https_only(self) -> bool:
+        return self.web_base_url.startswith("https://") or self.is_production
+
+    def validate(self) -> None:
+        if self.is_production:
+            if len(self.session_secret) < 32 or self.session_secret in INSECURE_SESSION_SECRET_VALUES:
+                raise ValueError(
+                    "SESSION_SECRET must be set to a strong value with at least 32 characters in production."
+                )
+            if not self.web_password_hash:
+                if self.web_password in INSECURE_PASSWORD_VALUES:
+                    raise ValueError(
+                        "Set ADMIN_WEB_PASSWORD_HASH for production or use a non-default admin password locally only."
+                    )
+                raise ValueError("ADMIN_WEB_PASSWORD_HASH is required when APP_ENV=production.")
+        if not self.web_password_hash and not self.web_password:
+            raise ValueError("Set either ADMIN_WEB_PASSWORD_HASH or ADMIN_WEB_PASSWORD.")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     group_raw = _get_env("GROUP_ID")
-    return Settings(
+    settings = Settings(
+        app_env=_get_env("APP_ENV", "development") or "development",
         bot_token=_get_env("BOT_TOKEN"),
         database_url=_normalize_database_url(_get_env("DATABASE_URL")),
         admin_ids=_split_ints(_get_env("ADMIN_IDS")),
@@ -96,8 +137,11 @@ def get_settings() -> Settings:
         port=_get_env_int("PORT", 8000),
         web_username=_get_env("ADMIN_WEB_USERNAME", "admin") or "admin",
         web_password=_get_env("ADMIN_WEB_PASSWORD", "change-me") or "change-me",
+        web_password_hash=_get_env("ADMIN_WEB_PASSWORD_HASH"),
         session_secret=_get_env("SESSION_SECRET", "change-me-please") or "change-me-please",
         company_name=_get_env("COMPANY_NAME", "Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.") or "Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.",
         default_site_name=_get_env("DEFAULT_SITE_NAME", "Sepang") or "Sepang",
         annual_leave_notice_days=_get_env_int("ANNUAL_LEAVE_NOTICE_DAYS", 5),
     )
+    settings.validate()
+    return settings

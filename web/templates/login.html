@@ -7,6 +7,7 @@
     <div class="error">{{ error }}</div>
     {% endif %}
     <form method="post" action="{{ request.url_for('login_post') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
         <div class="form-grid">
             <label>
                 Username

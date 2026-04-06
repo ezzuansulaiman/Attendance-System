@@ -6,6 +6,7 @@
     <div class="error">{{ error }}</div>
     {% endif %}
     <form method="post" action="{{ request.url_for('workers_update', worker_id=worker.id) if worker else request.url_for('workers_create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
         <div class="form-grid">
             <label>
                 Full Name

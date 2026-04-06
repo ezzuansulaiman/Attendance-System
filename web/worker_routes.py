@@ -8,7 +8,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from models import session_scope
 from services.attendance_service import AttendanceError, create_worker, get_worker_by_id, list_workers, update_worker
 from services.site_service import list_sites
-from web.dependencies import require_admin, templates
+from web.dependencies import require_admin, require_csrf, templates
+from web.security import SecurityError
 
 router = APIRouter(prefix="/workers")
 
@@ -38,6 +39,7 @@ async def workers_create(
     employee_code: str = Form(""),
     site_id: Optional[int] = Form(None),
     is_active: Optional[str] = Form(None),
+    csrf_token: str = Form(""),
 ) -> Response:
     redirect = require_admin(request)
     if redirect:
@@ -45,6 +47,7 @@ async def workers_create(
 
     async with session_scope() as session:
         try:
+            require_csrf(request, csrf_token)
             await create_worker(
                 session,
                 full_name=full_name,
@@ -54,7 +57,7 @@ async def workers_create(
                 site_id=site_id,
                 is_active=bool(is_active),
             )
-        except AttendanceError as exc:
+        except (AttendanceError, SecurityError) as exc:
             worker_items = await list_workers(session)
             sites = await list_sites(session)
             return templates.TemplateResponse(
@@ -93,6 +96,7 @@ async def workers_update(
     employee_code: str = Form(""),
     site_id: Optional[int] = Form(None),
     is_active: Optional[str] = Form(None),
+    csrf_token: str = Form(""),
 ) -> Response:
     redirect = require_admin(request)
     if redirect:
@@ -103,6 +107,7 @@ async def workers_update(
         if not worker:
             return RedirectResponse(url=request.url_for("workers"), status_code=303)
         try:
+            require_csrf(request, csrf_token)
             await update_worker(
                 session,
                 worker,
@@ -113,7 +118,7 @@ async def workers_update(
                 site_id=site_id,
                 is_active=bool(is_active),
             )
-        except AttendanceError as exc:
+        except (AttendanceError, SecurityError) as exc:
             worker_items = await list_workers(session)
             sites = await list_sites(session)
             return templates.TemplateResponse(

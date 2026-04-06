@@ -13,9 +13,19 @@ from services.attendance_service import (
     get_attendance_record,
     list_attendance_records,
     list_workers,
+    update_attendance_record,
 )
 from services.site_service import list_sites
-from web.dependencies import parse_date, parse_datetime_local, require_admin, templates, today_local
+from web.dependencies import (
+    FormValidationError,
+    parse_date,
+    parse_datetime_local,
+    require_admin,
+    require_csrf,
+    templates,
+    today_local,
+)
+from web.security import SecurityError
 
 router = APIRouter(prefix="/attendance")
 
@@ -31,6 +41,7 @@ async def _attendance_page_context(
     year: int,
     record_id: Optional[int] = None,
     site_id: Optional[int] = None,
+    form_data: Optional[dict[str, object]] = None,
 ) -> dict[str, object]:
     async with session_scope() as session:
         records = await list_attendance_records(session, month=month, year=year, site_id=site_id)
@@ -45,6 +56,7 @@ async def _attendance_page_context(
         "selected_month": month,
         "selected_year": year,
         "selected_site_id": site_id,
+        "form_data": form_data or {},
     }
 
 
@@ -94,12 +106,14 @@ async def attendance_create(
     check_in_at: str = Form(""),
     check_out_at: str = Form(""),
     notes: str = Form(""),
+    csrf_token: str = Form(""),
 ) -> Response:
     redirect = require_admin(request)
     if redirect:
         return redirect
 
     try:
+        require_csrf(request, csrf_token)
         async with session_scope() as session:
             await create_or_update_attendance_record(
                 session,
@@ -109,9 +123,19 @@ async def attendance_create(
                 check_out_at=parse_datetime_local(check_out_at),
                 notes=notes,
             )
-    except AttendanceError as exc:
+    except (AttendanceError, FormValidationError, SecurityError) as exc:
         selected_month, selected_year = _period_context(None, None)
-        context = await _attendance_page_context(month=selected_month, year=selected_year)
+        context = await _attendance_page_context(
+            month=selected_month,
+            year=selected_year,
+            form_data={
+                "worker_id": worker_id,
+                "attendance_date": attendance_date,
+                "check_in_at": check_in_at,
+                "check_out_at": check_out_at,
+                "notes": notes,
+            },
+        )
         return templates.TemplateResponse(
             request,
             "attendance.html",
@@ -130,30 +154,42 @@ async def attendance_update(
     check_in_at: str = Form(""),
     check_out_at: str = Form(""),
     notes: str = Form(""),
+    csrf_token: str = Form(""),
 ) -> Response:
     redirect = require_admin(request)
     if redirect:
         return redirect
 
-    new_date = parse_date(attendance_date)
     try:
+        require_csrf(request, csrf_token)
+        new_date = parse_date(attendance_date)
         async with session_scope() as session:
             record = await get_attendance_record(session, record_id)
             if not record:
                 return RedirectResponse(url=request.url_for("attendance"), status_code=303)
-            if record.worker_id != worker_id or record.attendance_date != new_date:
-                await delete_attendance_record(session, record)
-            await create_or_update_attendance_record(
+            await update_attendance_record(
                 session,
+                record,
                 worker_id=worker_id,
                 attendance_date=new_date,
                 check_in_at=parse_datetime_local(check_in_at),
                 check_out_at=parse_datetime_local(check_out_at),
                 notes=notes,
             )
-    except AttendanceError as exc:
+    except (AttendanceError, FormValidationError, SecurityError) as exc:
         selected_month, selected_year = _period_context(None, None)
-        context = await _attendance_page_context(month=selected_month, year=selected_year, record_id=record_id)
+        context = await _attendance_page_context(
+            month=selected_month,
+            year=selected_year,
+            record_id=record_id,
+            form_data={
+                "worker_id": worker_id,
+                "attendance_date": attendance_date,
+                "check_in_at": check_in_at,
+                "check_out_at": check_out_at,
+                "notes": notes,
+            },
+        )
         return templates.TemplateResponse(
             request,
             "attendance.html",
@@ -164,13 +200,28 @@ async def attendance_update(
 
 
 @router.post("/{record_id}/delete", name="attendance_delete")
-async def attendance_delete(request: Request, record_id: int) -> Response:
+async def attendance_delete(
+    request: Request,
+    record_id: int,
+    csrf_token: str = Form(""),
+) -> Response:
     redirect = require_admin(request)
     if redirect:
         return redirect
 
-    async with session_scope() as session:
-        record = await get_attendance_record(session, record_id)
-        if record:
-            await delete_attendance_record(session, record)
+    try:
+        require_csrf(request, csrf_token)
+        async with session_scope() as session:
+            record = await get_attendance_record(session, record_id)
+            if record:
+                await delete_attendance_record(session, record)
+    except SecurityError as exc:
+        selected_month, selected_year = _period_context(None, None)
+        context = await _attendance_page_context(month=selected_month, year=selected_year)
+        return templates.TemplateResponse(
+            request,
+            "attendance.html",
+            {"error": str(exc), **context},
+            status_code=400,
+        )
     return RedirectResponse(url=request.url_for("attendance"), status_code=303)

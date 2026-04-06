@@ -5,6 +5,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import Select, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -298,7 +299,49 @@ async def create_or_update_attendance_record(
     record.check_in_at = check_in_at
     record.check_out_at = check_out_at
     record.notes = _clean_optional_text(notes)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise AttendanceError("Another attendance record already exists for this worker on that date.") from exc
+    await session.refresh(record)
+    return record
+
+
+async def update_attendance_record(
+    session: AsyncSession,
+    record: AttendanceRecord,
+    *,
+    worker_id: int,
+    attendance_date: date,
+    check_in_at: Optional[datetime],
+    check_out_at: Optional[datetime],
+    notes: Optional[str],
+) -> AttendanceRecord:
+    worker = await get_worker_by_id(session, worker_id)
+    if not worker:
+        raise AttendanceError("Worker not found.")
+    if check_in_at and check_out_at and check_out_at < check_in_at:
+        raise AttendanceError("Check-out cannot be earlier than check-in.")
+
+    existing = await get_attendance_for_date(
+        session,
+        worker_id=worker_id,
+        attendance_date=attendance_date,
+    )
+    if existing and existing.id != record.id:
+        raise AttendanceError("Another attendance record already exists for this worker on that date.")
+
+    record.worker_id = worker_id
+    record.attendance_date = attendance_date
+    record.check_in_at = check_in_at
+    record.check_out_at = check_out_at
+    record.notes = _clean_optional_text(notes)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise AttendanceError("Another attendance record already exists for this worker on that date.") from exc
     await session.refresh(record)
     return record
 

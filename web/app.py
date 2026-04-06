@@ -19,7 +19,8 @@ def create_app() -> FastAPI:
         SessionMiddleware,
         secret_key=settings.session_secret,
         same_site="lax",
-        https_only=False,
+        https_only=settings.session_https_only,
+        session_cookie="attendance_admin_session",
     )
 
     @app.get("/health")

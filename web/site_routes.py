@@ -7,7 +7,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from models import session_scope
 from services.site_service import SiteError, create_site, get_site_by_id, list_sites, update_site
-from web.dependencies import require_admin, templates
+from web.dependencies import require_admin, require_csrf, templates
+from web.security import SecurityError
 
 router = APIRouter(prefix="/sites")
 
@@ -34,6 +35,7 @@ async def sites_create(
     code: str = Form(""),
     telegram_group_id: Optional[int] = Form(None),
     is_active: Optional[str] = Form(None),
+    csrf_token: str = Form(""),
 ) -> Response:
     redirect = require_admin(request)
     if redirect:
@@ -41,6 +43,7 @@ async def sites_create(
 
     async with session_scope() as session:
         try:
+            require_csrf(request, csrf_token)
             await create_site(
                 session,
                 name=name,
@@ -48,7 +51,7 @@ async def sites_create(
                 telegram_group_id=telegram_group_id,
                 is_active=bool(is_active),
             )
-        except SiteError as exc:
+        except (SiteError, SecurityError) as exc:
             site_items = await list_sites(session)
             return templates.TemplateResponse(
                 request,
@@ -83,6 +86,7 @@ async def sites_update(
     code: str = Form(""),
     telegram_group_id: Optional[int] = Form(None),
     is_active: Optional[str] = Form(None),
+    csrf_token: str = Form(""),
 ) -> Response:
     redirect = require_admin(request)
     if redirect:
@@ -93,6 +97,7 @@ async def sites_update(
         if not site:
             return RedirectResponse(url=request.url_for("sites"), status_code=303)
         try:
+            require_csrf(request, csrf_token)
             await update_site(
                 session,
                 site,
@@ -101,7 +106,7 @@ async def sites_update(
                 telegram_group_id=telegram_group_id,
                 is_active=bool(is_active),
             )
-        except SiteError as exc:
+        except (SiteError, SecurityError) as exc:
             site_items = await list_sites(session)
             return templates.TemplateResponse(
                 request,

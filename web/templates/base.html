@@ -126,7 +126,10 @@
                 <a href="{{ request.url_for('attendance') }}">Attendance</a>
                 <a href="{{ request.url_for('leaves') }}">Leaves</a>
                 <a href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}">PDF</a>
-                <a href="{{ request.url_for('logout') }}">Logout</a>
+                <form method="post" action="{{ request.url_for('logout') }}" style="margin:0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                    <button type="submit">Logout</button>
+                </form>
             </div>
             {% endif %}
         </div>

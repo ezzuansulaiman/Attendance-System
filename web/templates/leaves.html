@@ -2,6 +2,9 @@
 {% block content %}
 <div class="panel">
     <h2>Leave Requests</h2>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
     <form class="actions" method="get" action="{{ request.url_for('leaves') }}" style="margin-bottom: 14px;">
         <select name="site_id" style="max-width: 320px;">
             <option value="">All Sites</option>
@@ -40,9 +43,11 @@
                     <td class="actions">
                         {% if leave.status == 'pending' %}
                         <form method="post" action="{{ request.url_for('leaves_approve', leave_id=leave.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
                             <button type="submit">Approve</button>
                         </form>
                         <form method="post" action="{{ request.url_for('leaves_reject', leave_id=leave.id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
                             <button class="button danger" type="submit">Reject</button>
                         </form>
                         {% else %}
