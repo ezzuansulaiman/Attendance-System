@@ -11,6 +11,7 @@ from bot.context import is_admin, local_tz
 from bot.keyboards import admin_menu_keyboard, leave_review_keyboard
 from bot.leave_handlers import notify_worker_review
 from bot.messages import admin_menu_text, build_leave_summary_text
+from config import get_settings
 from models import session_scope
 from services.leave_service import (
     LeaveError,
@@ -22,6 +23,7 @@ from services.leave_service import (
 from services.report_service import generate_monthly_attendance_pdf
 
 router = Router()
+settings = get_settings()
 
 
 @router.message(Command("admin"))
@@ -29,7 +31,10 @@ async def admin_menu(message: Message) -> None:
     if not is_admin(message.from_user.id):
         await message.answer("This command is restricted to Telegram admins configured in ADMIN_IDS.")
         return
-    await message.answer(admin_menu_text(), reply_markup=admin_menu_keyboard())
+    await message.answer(
+        admin_menu_text(web_login_enabled=bool(settings.admin_web_login_url)),
+        reply_markup=admin_menu_keyboard(web_login_url=settings.admin_web_login_url),
+    )
 
 
 @router.callback_query(F.data == "admin:pending")

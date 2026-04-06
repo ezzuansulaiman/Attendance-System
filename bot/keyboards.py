@@ -1,3 +1,5 @@
+from typing import Optional
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
@@ -23,13 +25,14 @@ def leave_type_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def admin_menu_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Pending Leaves", callback_data="admin:pending")],
-            [InlineKeyboardButton(text="Current Month PDF", callback_data="admin:report:current")],
-        ]
-    )
+def admin_menu_keyboard(*, web_login_url: Optional[str] = None) -> InlineKeyboardMarkup:
+    inline_keyboard = [
+        [InlineKeyboardButton(text="Pending Leaves", callback_data="admin:pending")],
+        [InlineKeyboardButton(text="Current Month PDF", callback_data="admin:report:current")],
+    ]
+    if web_login_url:
+        inline_keyboard.append([InlineKeyboardButton(text="Open Admin Web", url=web_login_url)])
+    return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 
 def leave_review_keyboard(leave_id: int) -> InlineKeyboardMarkup:

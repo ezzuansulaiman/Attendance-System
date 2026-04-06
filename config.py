@@ -53,6 +53,7 @@ class Settings:
     database_url: str
     admin_ids: tuple[int, ...]
     group_id: Optional[int]
+    web_base_url: str
     timezone: str
     host: str
     port: int
@@ -71,6 +72,15 @@ class Settings:
     def local_timezone(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
 
+    @property
+    def admin_web_login_url(self) -> Optional[str]:
+        if not self.web_base_url:
+            return None
+        base_url = self.web_base_url.rstrip("/")
+        if base_url.endswith("/login"):
+            return base_url
+        return f"{base_url}/login"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
@@ -80,6 +90,7 @@ def get_settings() -> Settings:
         database_url=_normalize_database_url(_get_env("DATABASE_URL")),
         admin_ids=_split_ints(_get_env("ADMIN_IDS")),
         group_id=int(group_raw) if group_raw else None,
+        web_base_url=_get_env("WEB_BASE_URL"),
         timezone=_get_env("TIMEZONE", "Asia/Kuala_Lumpur") or "Asia/Kuala_Lumpur",
         host="0.0.0.0",
         port=_get_env_int("PORT", 8000),

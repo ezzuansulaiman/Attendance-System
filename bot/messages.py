@@ -23,10 +23,16 @@ def registration_intro_text() -> str:
     )
 
 
-def admin_menu_text() -> str:
+def admin_menu_text(*, web_login_enabled: bool) -> str:
+    web_line = (
+        "\nUse <b>Open Admin Web</b> to open the dashboard login page in your browser."
+        if web_login_enabled
+        else "\nSet <code>WEB_BASE_URL</code> to show a direct dashboard link here."
+    )
     return (
         "<b>Admin Menu</b>\n"
         "Use the buttons below to review pending leave requests or generate the current monthly PDF report."
+        f"{web_line}"
     )
 
 

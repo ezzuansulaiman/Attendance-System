@@ -32,6 +32,7 @@ BOT_TOKEN=<telegram bot token from BotFather>
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 ADMIN_IDS=<telegram_admin_id_1,telegram_admin_id_2>
 GROUP_ID=<optional_fallback_telegram_worker_group_id>
+WEB_BASE_URL=https://your-app-public-domain
 
 PORT=8000
 TIMEZONE=Asia/Kuala_Lumpur
@@ -57,6 +58,7 @@ Notes:
 - `DATABASE_URL` should come from the Railway PostgreSQL service reference variable.
 - The app already converts `postgres://...` into the SQLAlchemy-compatible async format automatically.
 - `GROUP_ID` is an optional fallback Telegram worker group if a site does not have its own Telegram group configured.
+- `WEB_BASE_URL` is the public root URL of your deployed web app, used to show an `Open Admin Web` button in Telegram `/admin`.
 - `DEFAULT_SITE_NAME` is the first site auto-created during DB initialization.
 - `ANNUAL_LEAVE_NOTICE_DAYS` controls how many days in advance Annual Leave must be submitted.
 - `SQLITE_PATH` is only useful for local development, not Railway production.
@@ -70,6 +72,7 @@ BOT_TOKEN=1234567890:AAExampleFromBotFather
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 ADMIN_IDS=232621401
 GROUP_ID=-1001234567890
+WEB_BASE_URL=https://attendance-system-production-xxxxx.up.railway.app
 PORT=8000
 TIMEZONE=Asia/Kuala_Lumpur
 COMPANY_NAME=Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.
@@ -92,6 +95,7 @@ Telegram IDs:
 
 - `ADMIN_IDS` must contain Telegram user IDs for admins who can use `/admin`.
 - `GROUP_ID` must be the worker group ID, usually like `-100...`.
+- `WEB_BASE_URL` should be your Railway public domain, for example `https://attendance-system-production-xxxxx.up.railway.app`.
 
 ## Multi-Site
 
@@ -125,6 +129,7 @@ Web admin access:
 - Open `http://localhost:8000/`
 - If you are not logged in, the app redirects to `/login`
 - Sign in using `ADMIN_WEB_USERNAME` and `ADMIN_WEB_PASSWORD`
+- If `WEB_BASE_URL` is configured, Telegram admins can also open the login page directly from `/admin` > `Open Admin Web`
 
 The app will:
 

@@ -31,6 +31,7 @@ BOT_TOKEN=<your bot token from BotFather>
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 ADMIN_IDS=232621401
 GROUP_ID=-1001234567890
+WEB_BASE_URL=https://your-app-public-domain
 
 PORT=8000
 TIMEZONE=Asia/Kuala_Lumpur
@@ -78,10 +79,11 @@ After deploy:
 1. open your Railway public domain
 2. if needed, go directly to `/login`
 3. log in using `ADMIN_WEB_USERNAME` and `ADMIN_WEB_PASSWORD`
-4. confirm the dashboard opens
-5. create sites in the `Sites` page
-6. create or edit workers and assign each worker to a site
-7. for each site, optionally fill `Telegram Group ID` to allow a separate Telegram group per site
+4. Telegram admins can also use `/admin` > `Open Admin Web` if `WEB_BASE_URL` is configured
+5. confirm the dashboard opens
+6. create sites in the `Sites` page
+7. create or edit workers and assign each worker to a site
+8. for each site, optionally fill `Telegram Group ID` to allow a separate Telegram group per site
 
 ## 7. Important Remark
 
