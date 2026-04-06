@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel">
+    <h2>{{ 'Edit Worker' if worker else 'Register Worker' }}</h2>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="{{ request.url_for('workers_update', worker_id=worker.id) if worker else request.url_for('workers_create') }}">
+        <div class="form-grid">
+            <label>
+                Full Name
+                <input type="text" name="full_name" value="{{ worker.full_name if worker else '' }}" required>
+            </label>
+            <label>
+                Telegram User ID
+                <input type="number" name="telegram_user_id" value="{{ worker.telegram_user_id if worker else '' }}" required>
+            </label>
+            <label>
+                Employee Code
+                <input type="text" name="employee_code" value="{{ worker.employee_code if worker else '' }}">
+            </label>
+            <label>
+                Site
+                <select name="site_id">
+                    <option value="">Unassigned</option>
+                    {% for site_item in sites %}
+                    <option value="{{ site_item.id }}" {% if worker and worker.site_id == site_item.id %}selected{% endif %}>
+                        {{ site_item.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label style="display:flex; align-items:center; gap:10px; padding-top:28px;">
+                <input type="checkbox" name="is_active" {% if not worker or worker.is_active %}checked{% endif %}>
+                Active worker
+            </label>
+        </div>
+        <div class="actions" style="margin-top: 14px;">
+            <button type="submit">{{ 'Update Worker' if worker else 'Create Worker' }}</button>
+            {% if worker %}
+            <a class="button secondary" href="{{ request.url_for('workers') }}">Cancel</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<div class="panel" style="margin-top: 18px;">
+    <h2>Registered Workers</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Telegram ID</th>
+                    <th>Code</th>
+                    <th>Site</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in workers %}
+                <tr>
+                    <td>{{ item.full_name }}</td>
+                    <td>{{ item.telegram_user_id }}</td>
+                    <td>{{ item.employee_code or '-' }}</td>
+                    <td>{{ item.site.name if item.site else 'Unassigned' }}</td>
+                    <td><span class="badge">{{ 'active' if item.is_active else 'inactive' }}</span></td>
+                    <td><a class="button secondary" href="{{ request.url_for('workers_edit', worker_id=item.id) }}">Edit</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6">No workers registered yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

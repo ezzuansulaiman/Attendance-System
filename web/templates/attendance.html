@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel">
+    <h2>{{ 'Edit Attendance Record' if record else 'Attendance Editor' }}</h2>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="{{ request.url_for('attendance_update', record_id=record.id) if record else request.url_for('attendance_create') }}">
+        <div class="form-grid">
+            <label>
+                Worker
+                <select name="worker_id" required>
+                    {% for worker_item in workers %}
+                    <option value="{{ worker_item.id }}" {% if record and record.worker_id == worker_item.id %}selected{% endif %}>
+                        {{ worker_item.full_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Attendance Date
+                <input type="date" name="attendance_date" value="{{ record.attendance_date.isoformat() if record else '' }}" required>
+            </label>
+            <label>
+                Check-In
+                <input type="datetime-local" name="check_in_at" value="{{ record.check_in_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_in_at else '' }}">
+            </label>
+            <label>
+                Check-Out
+                <input type="datetime-local" name="check_out_at" value="{{ record.check_out_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_out_at else '' }}">
+            </label>
+        </div>
+        <label style="display:block; margin-top: 12px;">
+            Notes
+            <textarea name="notes">{{ record.notes if record else '' }}</textarea>
+        </label>
+        <div class="actions" style="margin-top: 14px;">
+            <button type="submit">{{ 'Update Record' if record else 'Save Record' }}</button>
+            {% if record %}
+            <a class="button secondary" href="{{ request.url_for('attendance') }}">Cancel</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<div class="panel" style="margin-top: 18px;">
+    <div class="actions" style="justify-content: space-between;">
+        <h2 style="margin:0;">Attendance Records</h2>
+        <form class="actions" method="get" action="{{ request.url_for('attendance') }}">
+            <select name="site_id" style="width:220px;">
+                <option value="">All Sites</option>
+                {% for site in sites %}
+                <option value="{{ site.id }}" {% if selected_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
+                {% endfor %}
+            </select>
+            <input type="number" name="month" value="{{ selected_month }}" min="1" max="12" style="width:100px;">
+            <input type="number" name="year" value="{{ selected_year }}" min="2020" max="2100" style="width:120px;">
+            <button type="submit">Filter</button>
+            <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">PDF</a>
+        </form>
+    </div>
+    <div class="table-wrap" style="margin-top: 14px;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Worker</th>
+                    <th>Site</th>
+                    <th>Date</th>
+                    <th>Check-In</th>
+                    <th>Check-Out</th>
+                    <th>Notes</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in records %}
+                <tr>
+                    <td>{{ item.worker.full_name }}</td>
+                    <td>{{ item.worker.site.name if item.worker.site else 'Unassigned' }}</td>
+                    <td>{{ item.attendance_date }}</td>
+                    <td>{{ item.check_in_at.strftime('%Y-%m-%d %H:%M') if item.check_in_at else '-' }}</td>
+                    <td>{{ item.check_out_at.strftime('%Y-%m-%d %H:%M') if item.check_out_at else '-' }}</td>
+                    <td>{{ item.notes or '-' }}</td>
+                    <td class="actions">
+                        <a class="button secondary" href="{{ request.url_for('attendance_edit', record_id=item.id) }}">Edit</a>
+                        <form method="post" action="{{ request.url_for('attendance_delete', record_id=item.id) }}">
+                            <button class="button danger" type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7">No attendance records found for this period.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

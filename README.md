@@ -1,118 +1,138 @@
 # KHSAR Attendance System
 
-Sistem attendance pekerja dengan web admin, portal pekerja, dan bot Telegram.
+Telegram attendance bot + FastAPI admin dashboard for `Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.`
 
-## Setup Railway terbaik
+## Current Architecture
 
-Guna 3 service dalam satu project Railway:
+- `main.py` runs the FastAPI web app and Telegram bot together in one process.
+- Railway should deploy:
+  1. one `PostgreSQL` service
+  2. one `application` service from this repository
+- The app listens on `0.0.0.0:${PORT}` and exposes `/health`.
+- The app supports multiple sites, not just Sepang.
 
-1. `PostgreSQL`
-2. `attendance-web`
-3. `attendance-bot`
+## Railway Deployment
 
-Kedua-dua service app boleh guna repo yang sama.
+Because this repository already includes a [Dockerfile](./Dockerfile), Railway will build from that Dockerfile by default. Railway's docs state that when a Dockerfile is present, the service uses the Dockerfile image and defaults to its `ENTRYPOINT`/`CMD` unless you override the start command.
 
-## Start command Railway
+Recommended Railway setup:
 
-Untuk `attendance-web`:
+1. Create a new Railway project.
+2. Add a `PostgreSQL` service.
+3. Add one app service from this GitHub repo.
+4. Do not set a custom Start Command unless you intentionally want to override the Dockerfile.
+5. In the app service, set the Healthcheck Path to `/health`.
 
-```bash
-py -3 main.py
-```
+## Railway Variables
 
-Variables:
-
-```env
-SERVICE_MODE=web
-DATABASE_URL=${{Postgres.DATABASE_URL}}
-FLASK_SECRET_KEY=<nilai-rawak-panjang>
-ADMIN_PASSWORD=<kata-laluan-admin-kuat>
-TELEGRAM_BOT_TOKEN=<token-botfather>
-ADMIN_TELEGRAM_IDS=<id1,id2>
-ADMIN_TELEGRAM_GROUP_IDS=<group_id_optional>
-WORKER_TELEGRAM_GROUP_IDS=<group_id_optional>
-SESSION_COOKIE_SECURE=1
-PORT=8080
-```
-
-Untuk `attendance-bot`:
-
-```bash
-py -3 main.py
-```
-
-Variables:
+Set these variables on the app service:
 
 ```env
-SERVICE_MODE=bot
+BOT_TOKEN=<telegram bot token from BotFather>
 DATABASE_URL=${{Postgres.DATABASE_URL}}
-TELEGRAM_BOT_TOKEN=<token-botfather>
-ADMIN_TELEGRAM_IDS=<id1,id2>
-ADMIN_TELEGRAM_GROUP_IDS=<group_id_optional>
-WORKER_TELEGRAM_GROUP_IDS=<group_id_optional>
-BOT_TIMEZONE=Asia/Kuala_Lumpur
-WORKDAY_START=07:00
-WORKDAY_END=17:30
+ADMIN_IDS=<telegram_admin_id_1,telegram_admin_id_2>
+GROUP_ID=<optional_fallback_telegram_worker_group_id>
+
+PORT=8000
+TIMEZONE=Asia/Kuala_Lumpur
+COMPANY_NAME=Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.
+DEFAULT_SITE_NAME=Sepang
+
+ADMIN_WEB_USERNAME=admin
+ADMIN_WEB_PASSWORD=<strong_admin_password>
+SESSION_SECRET=<long_random_secret>
 ```
 
-Nota:
+You can copy from [`.env.railway.example`](./.env.railway.example).
 
-- Gambar bukti sokongan tidak disimpan pada hosting. Sistem hanya menyimpan rujukan Telegram (`file_id`) dalam database dan akan memuatkan semula gambar dari Telegram bila admin semak.
+Optional variables:
 
-Bot akan hantar peringatan check-in automatik kepada pekerja aktif yang telah
-link Telegram pada setiap hari Isnin hingga Jumaat, tepat pada `WORKDAY_START`.
-Notifikasi permohonan cuti boleh dihantar terus ke chat admin individu dan juga
-ke admin group. Dalam group, admin boleh gunakan butang inline `Luluskan` /
-`Tolak` terus pada mesej notifikasi.
+```env
+SQLITE_PATH=attendance.db
+```
 
-Jika anda mahu pekerja buat `check-in`, `check-out`, dan `apply cuti` terus
-dalam group Telegram, isi `WORKER_TELEGRAM_GROUP_IDS` dengan `chat_id` group
-pekerja tersebut. Bot akan benarkan aliran staf dalam group itu sahaja.
+Notes:
 
-Nota penting untuk mod group pekerja:
+- `DATABASE_URL` should come from the Railway PostgreSQL service reference variable.
+- The app already converts `postgres://...` into the SQLAlchemy-compatible async format automatically.
+- `GROUP_ID` is an optional fallback Telegram worker group if a site does not have its own Telegram group configured.
+- `DEFAULT_SITE_NAME` is the first site auto-created during DB initialization.
+- `SQLITE_PATH` is only useful for local development, not Railway production.
 
-- Respons bot akan kelihatan kepada ahli group.
-- Permohonan cuti dalam group guna format satu arahan seperti
-  `/cuti AL 15/04/2026 16/04/2026 urusan keluarga`.
-- Jika jenis `MC` atau `EML`, bot akan terus minta pekerja lampirkan gambar
-  bukti sebaik sahaja permohonan dihantar.
-- Bila admin lulus atau tolak, bot akan maklumkan semula status ke group pekerja.
+## What To Put In Railway
 
-## Kenapa PostgreSQL paling sesuai
+Use values like these:
 
-- Railway menyokong PostgreSQL, MySQL, Redis, MongoDB, dan database lain melalui Docker/template.
-- Untuk sistem ini, PostgreSQL paling sesuai kerana web app dan bot Telegram akan berkongsi data yang sama secara stabil.
-- SQLite sesuai untuk local test atau single-instance sahaja, bukan pilihan terbaik bila web dan bot dideploy sebagai dua service berasingan.
+```env
+BOT_TOKEN=1234567890:AAExampleFromBotFather
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+ADMIN_IDS=232621401
+GROUP_ID=-1001234567890
+PORT=8000
+TIMEZONE=Asia/Kuala_Lumpur
+COMPANY_NAME=Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.
+DEFAULT_SITE_NAME=Sepang
+ADMIN_WEB_USERNAME=admin
+ADMIN_WEB_PASSWORD=use-a-strong-password-here
+SESSION_SECRET=use-a-long-random-secret-here
+```
 
-Rujukan Railway:
+## Telegram Setup
 
-- https://docs.railway.com/data-storage
+In BotFather:
 
-## Local run
+1. Create or open your bot.
+2. Copy the bot token into `BOT_TOKEN`.
+3. Go to `Bot Settings` > `Group Privacy` > turn it `OFF`.
 
-Web + Bot serentak:
+Telegram IDs:
+
+- `ADMIN_IDS` must contain Telegram user IDs for admins who can use `/admin`.
+- `GROUP_ID` must be the worker group ID, usually like `-100...`.
+
+## Multi-Site
+
+The system is now flexible for multiple sites:
+
+- Create and manage sites in the web dashboard under `Sites`.
+- Assign each worker to a site.
+- Optionally assign each site its own `Telegram Group ID`.
+- Filter dashboard, attendance, leave list, and PDF reports by site.
+- The monthly PDF title will include the selected site when filtered.
+
+## Important Security Remark
+
+Your local `.env` currently contains a real Telegram bot token and a weak admin password. You should rotate both before production:
+
+1. Regenerate the Telegram bot token in BotFather.
+2. Replace `ADMIN_WEB_PASSWORD` with a strong value.
+3. Replace `SESSION_SECRET` with a long random secret.
+4. Do not commit `.env` to GitHub.
+
+## Local Run
 
 ```bash
-set SERVICE_MODE=all
 py -3 main.py
 ```
 
-Atau terus guna:
+You can copy from [`.env.local.example`](./.env.local.example) for local setup.
 
-```bash
-start.bat
-```
+The app will:
 
-Web:
+- initialize the database
+- start FastAPI
+- start the Telegram bot if `BOT_TOKEN` is set
 
-```bash
-set SERVICE_MODE=web
-py -3 main.py
-```
+## Railway Notes
 
-Bot:
+According to Railway's current docs:
 
-```bash
-set SERVICE_MODE=bot
-py -3 main.py
-```
+- PostgreSQL exposes `DATABASE_URL` and related connection variables to other services in the same project.
+- When a Dockerfile is present, Railway builds from that Dockerfile.
+- If a healthcheck is configured, Railway waits for it to pass before marking the deployment active.
+
+## Official References
+
+- Railway PostgreSQL docs: https://docs.railway.com/guides/postgresql
+- Railway deployments reference: https://docs.railway.com/deployments/reference
+- Railway start command docs: https://docs.railway.com/deployments/start-command

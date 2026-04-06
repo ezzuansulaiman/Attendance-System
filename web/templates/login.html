@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel" style="max-width: 460px; margin: 8vh auto 0;">
+    <h2>Admin Login</h2>
+    <p>Sign in to manage attendance records, workers, leave approvals, and reports.</p>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="{{ request.url_for('login_post') }}">
+        <div class="form-grid">
+            <label>
+                Username
+                <input type="text" name="username" required>
+            </label>
+            <label>
+                Password
+                <input type="password" name="password" required>
+            </label>
+        </div>
+        <div class="actions" style="margin-top: 14px;">
+            <button type="submit">Login</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

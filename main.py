@@ -1,67 +1,46 @@
-"""Unified entrypoint for local runs and Railway services."""
+from __future__ import annotations
 
-import os
-import subprocess
-import sys
-import time
+import asyncio
+import logging
 
+import uvicorn
 
-def _run_all():
-    env_base = os.environ.copy()
-    script_path = os.path.abspath(__file__)
+from bot.runner import run_bot_polling
+from config import get_settings
+from models.database import init_database
+from web.app import create_app
 
-    services = []
-    for service_mode in ("web", "bot"):
-        env = env_base.copy()
-        env["SERVICE_MODE"] = service_mode
-        proc = subprocess.Popen([sys.executable, script_path], env=env)
-        services.append((service_mode, proc))
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
-    print("Attendance System running in combined mode: web + bot")
-
-    try:
-        while True:
-            for service_mode, proc in services:
-                code = proc.poll()
-                if code is not None:
-                    raise SystemExit(
-                        f"Service '{service_mode}' berhenti dengan kod keluar {code}."
-                    )
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Menghentikan web dan bot...")
-    finally:
-        for _, proc in services:
-            if proc.poll() is None:
-                proc.terminate()
-        for _, proc in services:
-            try:
-                proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+settings = get_settings()
 
 
-def main():
-    service_mode = os.getenv("SERVICE_MODE", "web").strip().lower()
+async def run_web_server() -> None:
+    app = create_app()
+    config = uvicorn.Config(
+        app=app,
+        host=settings.host,
+        port=settings.port,
+        log_level="info",
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
 
-    if service_mode == "all":
-        _run_all()
-        return
 
-    if service_mode == "bot":
-        import bot
+def build_runtime_tasks() -> list:
+    tasks = [run_web_server()]
+    if settings.bot_enabled:
+        tasks.append(run_bot_polling())
+    return tasks
 
-        bot.main()
-        return
 
-    if service_mode == "web":
-        import app
-
-        app.run_server()
-        return
-
-    raise SystemExit(f"SERVICE_MODE tidak sah: {service_mode}")
+async def main() -> None:
+    await init_database()
+    await asyncio.gather(*build_runtime_tasks())
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

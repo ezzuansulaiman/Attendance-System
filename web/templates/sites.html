@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel">
+    <h2>{{ 'Edit Site' if site else 'Create Site' }}</h2>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="{{ request.url_for('sites_update', site_id=site.id) if site else request.url_for('sites_create') }}">
+        <div class="form-grid">
+            <label>
+                Site Name
+                <input type="text" name="name" value="{{ site.name if site else '' }}" required>
+            </label>
+            <label>
+                Site Code
+                <input type="text" name="code" value="{{ site.code if site else '' }}">
+            </label>
+            <label>
+                Telegram Group ID
+                <input type="number" name="telegram_group_id" value="{{ site.telegram_group_id if site and site.telegram_group_id else '' }}">
+            </label>
+            <label style="display:flex; align-items:center; gap:10px; padding-top:28px;">
+                <input type="checkbox" name="is_active" {% if not site or site.is_active %}checked{% endif %}>
+                Active site
+            </label>
+        </div>
+        <div class="actions" style="margin-top: 14px;">
+            <button type="submit">{{ 'Update Site' if site else 'Create Site' }}</button>
+            {% if site %}
+            <a class="button secondary" href="{{ request.url_for('sites') }}">Cancel</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<div class="panel" style="margin-top: 18px;">
+    <h2>Company Sites</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Code</th>
+                    <th>Telegram Group</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in sites %}
+                <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.code or '-' }}</td>
+                    <td>{{ item.telegram_group_id or '-' }}</td>
+                    <td><span class="badge">{{ 'active' if item.is_active else 'inactive' }}</span></td>
+                    <td><a class="button secondary" href="{{ request.url_for('sites_edit', site_id=item.id) }}">Edit</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5">No sites created yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

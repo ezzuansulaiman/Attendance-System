@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Dashboard</title>
+    <style>
+        :root {
+            --bg: #f3f6fb;
+            --surface: #ffffff;
+            --surface-alt: #e8eef7;
+            --primary: #16324f;
+            --accent: #c2410c;
+            --text: #102033;
+            --muted: #5b6b80;
+            --border: #d4deea;
+            --danger: #b91c1c;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Tahoma, sans-serif;
+            background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+            color: var(--text);
+        }
+        a { color: var(--primary); text-decoration: none; }
+        .layout { max-width: 1220px; margin: 0 auto; padding: 24px; }
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .brand h1 { margin: 0; font-size: 1.8rem; }
+        .brand p { margin: 6px 0 0; color: var(--muted); }
+        .nav { display: flex; gap: 10px; flex-wrap: wrap; }
+        .nav a {
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+        }
+        .grid { display: grid; gap: 18px; }
+        .cards { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+        .card, .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 22px;
+            padding: 20px;
+            box-shadow: 0 10px 28px rgba(22, 50, 79, 0.06);
+        }
+        .metric { font-size: 2rem; font-weight: 700; margin-top: 8px; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            vertical-align: top;
+        }
+        th { background: var(--surface-alt); }
+        tr:nth-child(even) td { background: #fbfdff; }
+        .form-grid {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        textarea { min-height: 100px; resize: vertical; }
+        .actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .button, button {
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: none;
+            background: var(--primary);
+            color: white;
+            cursor: pointer;
+        }
+        .button.secondary { background: var(--surface-alt); color: var(--text); }
+        .button.danger { background: var(--danger); }
+        .error {
+            margin-bottom: 14px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: #fef2f2;
+            color: var(--danger);
+            border: 1px solid #fecaca;
+        }
+        .badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            background: var(--surface-alt);
+        }
+        @media (max-width: 760px) {
+            .topbar { flex-direction: column; align-items: flex-start; }
+            .layout { padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <div class="topbar">
+            <div class="brand">
+                <h1>Telegram Attendance Dashboard</h1>
+                <p>{{ current_company_name() }}</p>
+            </div>
+            {% if request.session.get("is_admin") %}
+            <div class="nav">
+                <a href="{{ request.url_for('dashboard') }}">Dashboard</a>
+                <a href="{{ request.url_for('sites') }}">Sites</a>
+                <a href="{{ request.url_for('workers') }}">Workers</a>
+                <a href="{{ request.url_for('attendance') }}">Attendance</a>
+                <a href="{{ request.url_for('leaves') }}">Leaves</a>
+                <a href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}">PDF</a>
+                <a href="{{ request.url_for('logout') }}">Logout</a>
+            </div>
+            {% endif %}
+        </div>
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

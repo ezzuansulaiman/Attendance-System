@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel" style="margin-bottom: 18px;">
+    <form class="actions" method="get" action="{{ request.url_for('dashboard') }}">
+        <select name="site_id" style="max-width: 320px;">
+            <option value="">All Sites</option>
+            {% for site in sites %}
+            <option value="{{ site.id }}" {% if selected_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Filter Site</button>
+        <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Download PDF</a>
+    </form>
+</div>
+<div class="grid cards">
+    <div class="card">
+        <div class="badge">Active Workers</div>
+        <div class="metric">{{ summary.total_workers }}</div>
+    </div>
+    <div class="card">
+        <div class="badge">Checked In Today</div>
+        <div class="metric">{{ summary.checked_in }}</div>
+    </div>
+    <div class="card">
+        <div class="badge">Checked Out Today</div>
+        <div class="metric">{{ summary.checked_out }}</div>
+    </div>
+    <div class="card">
+        <div class="badge">Pending Leaves</div>
+        <div class="metric">{{ summary.pending_leaves }}</div>
+    </div>
+</div>
+
+<div class="grid" style="margin-top: 18px;">
+    <div class="panel">
+        <h2>Recent Attendance Updates</h2>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Worker</th>
+                        <th>Site</th>
+                        <th>Date</th>
+                        <th>Check-In</th>
+                        <th>Check-Out</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in recent_records %}
+                    <tr>
+                        <td>{{ record.worker.full_name }}</td>
+                        <td>{{ record.worker.site.name if record.worker.site else 'Unassigned' }}</td>
+                        <td>{{ record.attendance_date }}</td>
+                        <td>{{ record.check_in_at.strftime('%Y-%m-%d %H:%M') if record.check_in_at else '-' }}</td>
+                        <td>{{ record.check_out_at.strftime('%Y-%m-%d %H:%M') if record.check_out_at else '-' }}</td>
+                        <td>{{ record.notes or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6">No attendance records yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Latest Leave Requests</h2>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Worker</th>
+                        <th>Site</th>
+                        <th>Type</th>
+                        <th>Dates</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for leave in leave_requests %}
+                    <tr>
+                        <td>#{{ leave.id }}</td>
+                        <td>{{ leave.worker.full_name }}</td>
+                        <td>{{ leave.worker.site.name if leave.worker.site else 'Unassigned' }}</td>
+                        <td>{{ leave.leave_type }}</td>
+                        <td>{{ leave.start_date }} to {{ leave.end_date }}</td>
+                        <td><span class="badge">{{ leave.status }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6">No leave requests yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
