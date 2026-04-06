@@ -117,6 +117,12 @@ py -3 main.py
 
 You can copy from [`.env.local.example`](./.env.local.example) for local setup.
 
+Web admin access:
+
+- Open `http://localhost:8000/`
+- If you are not logged in, the app redirects to `/login`
+- Sign in using `ADMIN_WEB_USERNAME` and `ADMIN_WEB_PASSWORD`
+
 The app will:
 
 - initialize the database

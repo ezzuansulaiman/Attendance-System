@@ -75,10 +75,12 @@ Usually group IDs look like:
 After deploy:
 
 1. open your Railway public domain
-2. log in using `ADMIN_WEB_USERNAME` and `ADMIN_WEB_PASSWORD`
-3. create sites in the `Sites` page
-4. create or edit workers and assign each worker to a site
-5. for each site, optionally fill `Telegram Group ID` to allow a separate Telegram group per site
+2. if needed, go directly to `/login`
+3. log in using `ADMIN_WEB_USERNAME` and `ADMIN_WEB_PASSWORD`
+4. confirm the dashboard opens
+5. create sites in the `Sites` page
+6. create or edit workers and assign each worker to a site
+7. for each site, optionally fill `Telegram Group ID` to allow a separate Telegram group per site
 
 ## 7. Important Remark
 

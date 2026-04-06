@@ -30,16 +30,21 @@ async def run_web_server() -> None:
     await server.serve()
 
 
-def build_runtime_tasks() -> list:
-    tasks = [run_web_server()]
-    if settings.bot_enabled:
-        tasks.append(run_bot_polling())
-    return tasks
+async def run_bot_polling_guarded() -> None:
+    try:
+        await run_bot_polling()
+    except Exception:
+        logging.exception("Telegram bot polling stopped unexpectedly. Web admin will continue running.")
+        while True:
+            await asyncio.sleep(3600)
 
 
 async def main() -> None:
     await init_database()
-    await asyncio.gather(*build_runtime_tasks())
+    tasks = [run_web_server()]
+    if settings.bot_enabled:
+        tasks.append(run_bot_polling_guarded())
+    await asyncio.gather(*tasks)
 
 
 if __name__ == "__main__":
