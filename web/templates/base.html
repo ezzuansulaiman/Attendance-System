@@ -126,6 +126,7 @@
                 <a href="{{ request.url_for('attendance') }}">Attendance</a>
                 <a href="{{ request.url_for('leaves') }}">Leaves</a>
                 <a href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}">PDF</a>
+                <a href="{{ request.url_for('monthly_report_excel') }}?year={{ current_year() }}&month={{ current_month() }}">Excel</a>
                 <form method="post" action="{{ request.url_for('logout') }}" style="margin:0;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
                     <button type="submit">Logout</button>

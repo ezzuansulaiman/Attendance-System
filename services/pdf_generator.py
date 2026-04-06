@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import calendar
 import io
-from datetime import datetime
 from typing import Any
 
 from reportlab.lib import colors
@@ -76,28 +75,22 @@ def _build_styles() -> dict[str, ParagraphStyle]:
     }
 
 
-def _build_metadata_table(
-    *,
-    company_name: str,
-    year: int,
-    month: int,
-    styles: dict[str, ParagraphStyle],
-) -> Table:
-    period_label = f"{calendar.month_name[month]} {year}"
-    generated_at = datetime.now().strftime("%d %b %Y %H:%M")
+def _build_metadata_table(*, report: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
     metadata_rows = [
         [
             Paragraph("COMPANY", styles["meta_label"]),
+            Paragraph("SITE", styles["meta_label"]),
             Paragraph("REPORT PERIOD", styles["meta_label"]),
             Paragraph("GENERATED", styles["meta_label"]),
         ],
         [
-            Paragraph(company_name, styles["meta_value"]),
-            Paragraph(period_label, styles["meta_value"]),
-            Paragraph(generated_at, styles["meta_value"]),
+            Paragraph(str(report["company_name"]), styles["meta_value"]),
+            Paragraph(str(report["site_name"]), styles["meta_value"]),
+            Paragraph(str(report["period_label"]), styles["meta_value"]),
+            Paragraph(str(report["generated_at"]), styles["meta_value"]),
         ],
     ]
-    metadata_table = Table(metadata_rows, colWidths=[88 * mm, 55 * mm, 45 * mm])
+    metadata_table = Table(metadata_rows, colWidths=[74 * mm, 54 * mm, 54 * mm, 44 * mm])
     metadata_table.setStyle(
         TableStyle(
             [
@@ -116,14 +109,51 @@ def _build_metadata_table(
     return metadata_table
 
 
-def _build_attendance_table(
-    *,
-    year: int,
-    month: int,
-    rows: list[dict[str, Any]],
-) -> Table:
-    days_header = ["No", "Employee Name", "Code"] + [str(day) for day in range(1, 32)]
-    table_data: list[list[str]] = [days_header]
+def _build_summary_table(*, summary: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
+    summary_rows = [
+        [
+            Paragraph("ACTIVE WORKERS", styles["meta_label"]),
+            Paragraph("ATTENDANCE DAYS", styles["meta_label"]),
+            Paragraph("CHECKED-OUT DAYS", styles["meta_label"]),
+            Paragraph("AVG DAYS / WORKER", styles["meta_label"]),
+            Paragraph("COMPLETION RATE", styles["meta_label"]),
+        ],
+        [
+            Paragraph(str(summary["total_workers"]), styles["meta_value"]),
+            Paragraph(str(summary["total_present_days"]), styles["meta_value"]),
+            Paragraph(str(summary["total_completed_days"]), styles["meta_value"]),
+            Paragraph(str(summary["average_present_days"]), styles["meta_value"]),
+            Paragraph(f'{summary["completion_rate"]}%', styles["meta_value"]),
+        ],
+    ]
+    summary_table = Table(summary_rows, colWidths=[48 * mm, 48 * mm, 48 * mm, 48 * mm, 48 * mm])
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16324f")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#f8fafc")),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#cbd5e1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ]
+        )
+    )
+    return summary_table
+
+
+def _build_attendance_table(*, report: dict[str, Any]) -> Table:
+    year = int(report["year"])
+    month = int(report["month"])
+    rows = list(report["rows"])
+    table_data: list[list[str]] = [
+        ["No", "Employee Name", "Code", "Site"] + [str(day) for day in range(1, 32)] + ["P", "Out"]
+    ]
 
     for index, row in enumerate(rows, start=1):
         table_data.append(
@@ -131,13 +161,14 @@ def _build_attendance_table(
                 str(index),
                 str(row["worker_name"]),
                 str(row["employee_code"]),
+                str(row["site_name"]),
                 *[str(value) for value in row["days"]],
+                str(row["present_days"]),
+                str(row["completed_days"]),
             ]
         )
 
-    column_widths = [20, 145, 52] + [14.8] * 31
-    table = Table(table_data, colWidths=column_widths, repeatRows=1)
-
+    table = Table(table_data, colWidths=[18, 120, 42, 60] + [12.7] * 31 + [24, 24], repeatRows=1)
     style_commands: list[tuple[Any, ...]] = [
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16324f")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -153,7 +184,9 @@ def _build_attendance_table(
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("ALIGN", (1, 1), (1, -1), "LEFT"),
+        ("ALIGN", (3, 1), (3, -1), "LEFT"),
         ("LEFTPADDING", (1, 1), (1, -1), 5),
+        ("LEFTPADDING", (3, 1), (3, -1), 5),
     ]
 
     for row_index in range(1, len(table_data)):
@@ -161,13 +194,12 @@ def _build_attendance_table(
         style_commands.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor(row_background)))
 
     for day in range(1, 32):
-        column_index = 2 + day
+        column_index = 3 + day
         if day > calendar.monthrange(year, month)[1]:
             style_commands.append(("BACKGROUND", (column_index, 0), (column_index, -1), colors.HexColor("#e5e7eb")))
             style_commands.append(("TEXTCOLOR", (column_index, 1), (column_index, -1), colors.HexColor("#94a3b8")))
             continue
-        weekday = calendar.weekday(year, month, day)
-        if weekday >= 5:
+        if calendar.weekday(year, month, day) >= 5:
             style_commands.append(("BACKGROUND", (column_index, 0), (column_index, -1), colors.HexColor("#edf2f7")))
 
     table.setStyle(TableStyle(style_commands))
@@ -187,16 +219,8 @@ def _build_signatures(styles: dict[str, ParagraphStyle]) -> Table:
                 "\n\n____________________________",
                 "\n\n____________________________",
             ],
-            [
-                "Name:",
-                "Name:",
-                "Name:",
-            ],
-            [
-                "Date:",
-                "Date:",
-                "Date:",
-            ],
+            ["Name:", "Name:", "Name:"],
+            ["Date:", "Date:", "Date:"],
         ],
         colWidths=[85 * mm, 85 * mm, 85 * mm],
     )
@@ -227,13 +251,9 @@ def _draw_footer(canvas, document) -> None:
     canvas.restoreState()
 
 
-def build_monthly_attendance_pdf(
-    *,
-    company_name: str,
-    year: int,
-    month: int,
-    rows: list[dict[str, Any]],
-) -> bytes:
+def build_monthly_attendance_pdf(*, report: dict[str, Any]) -> bytes:
+    year = int(report["year"])
+    month = int(report["month"])
     buffer = io.BytesIO()
     document = SimpleDocTemplate(
         buffer,
@@ -245,23 +265,23 @@ def build_monthly_attendance_pdf(
         title=f"Attendance Submission - {calendar.month_name[month]} {year}",
     )
     styles = _build_styles()
-
     story = [
         Paragraph("ATTENDANCE CLAIM SUBMISSION", styles["eyebrow"]),
         Spacer(1, 3),
         Paragraph("Monthly Attendance Report", styles["title"]),
         Spacer(1, 3),
         Paragraph(
-            "Prepared for submission and record confirmation. Internal leave classifications are omitted from this export.",
+            "Prepared for client submission, reconciliation, and attendance confirmation. Use P to indicate a recorded presence for the day.",
             styles["subtitle"],
         ),
         Spacer(1, 8),
-        _build_metadata_table(company_name=company_name, year=year, month=month, styles=styles),
+        _build_metadata_table(report=report, styles=styles),
         Spacer(1, 10),
-        _build_attendance_table(year=year, month=month, rows=rows),
+        _build_summary_table(summary=report["summary"], styles=styles),
+        Spacer(1, 10),
+        _build_attendance_table(report=report),
         Spacer(1, 14),
         _build_signatures(styles),
     ]
-
     document.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     return buffer.getvalue()

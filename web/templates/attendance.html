@@ -51,7 +51,10 @@
 
 <div class="panel" style="margin-top: 18px;">
     <div class="actions" style="justify-content: space-between;">
-        <h2 style="margin:0;">Attendance Records</h2>
+        <div>
+            <h2 style="margin:0;">Attendance Records</h2>
+            <p style="margin:6px 0 0; color: var(--muted);">Gunakan export submission untuk jadual bulanan client dalam format PDF atau Excel.</p>
+        </div>
         <form class="actions" method="get" action="{{ request.url_for('attendance') }}">
             <select name="site_id" style="width:220px;">
                 <option value="">All Sites</option>
@@ -62,7 +65,8 @@
             <input type="number" name="month" value="{{ selected_month }}" min="1" max="12" style="width:100px;">
             <input type="number" name="year" value="{{ selected_year }}" min="2020" max="2100" style="width:120px;">
             <button type="submit">Filter</button>
-            <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">PDF</a>
+            <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Submission PDF</a>
+            <a class="button secondary" href="{{ request.url_for('monthly_report_excel') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Submission Excel</a>
         </form>
     </div>
     <div class="table-wrap" style="margin-top: 14px;">
