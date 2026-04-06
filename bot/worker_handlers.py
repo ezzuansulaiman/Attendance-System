@@ -17,9 +17,16 @@ from bot.context import (
     worker_chat_is_allowed,
 )
 from bot.keyboards import admin_menu_keyboard, worker_menu_keyboard
-from bot.messages import admin_menu_text, worker_menu_text
+from bot.messages import admin_menu_text, registration_intro_text, worker_menu_text
+from bot.states import RegistrationStates
 from models import session_scope
-from services.attendance_service import AttendanceError, check_in, check_out, get_worker_by_telegram_id
+from services.attendance_service import (
+    AttendanceError,
+    check_in,
+    check_out,
+    get_worker_by_telegram_id,
+    self_register_worker,
+)
 
 router = Router()
 
@@ -33,7 +40,8 @@ async def show_menu(message: Message, state: FSMContext) -> None:
         await message.answer(worker_group_restriction_text())
         return
     if not worker and not is_admin(message.from_user.id):
-        await message.answer("Your Telegram user ID is not registered in the workers database yet.")
+        await state.set_state(RegistrationStates.full_name)
+        await message.answer(registration_intro_text())
         return
 
     if worker:
@@ -79,3 +87,44 @@ async def handle_attendance_action(callback: CallbackQuery) -> None:
             )
         except AttendanceError as exc:
             await callback.message.answer(str(exc))
+
+
+@router.message(RegistrationStates.full_name)
+async def capture_registration_name(message: Message, state: FSMContext) -> None:
+    full_name = (message.text or "").strip()
+    if not full_name:
+        await message.answer("Please send your <b>NAME</b>.")
+        return
+
+    await state.update_data(full_name=full_name)
+    await state.set_state(RegistrationStates.ic_number)
+    await message.answer("Now send your <b>NO IC</b>.")
+
+
+@router.message(RegistrationStates.ic_number)
+async def capture_registration_ic(message: Message, state: FSMContext) -> None:
+    ic_number = (message.text or "").strip()
+    if not ic_number:
+        await message.answer("Please send your <b>NO IC</b>.")
+        return
+
+    data = await state.get_data()
+    async with session_scope() as session:
+        try:
+            worker = await self_register_worker(
+                session,
+                telegram_user_id=message.from_user.id,
+                full_name=data["full_name"],
+                ic_number=ic_number,
+            )
+        except AttendanceError as exc:
+            await message.answer(str(exc))
+            await state.clear()
+            return
+
+    await state.clear()
+    await message.answer(
+        f"Registration completed for {worker.full_name}.\n"
+        "You can now use the attendance menu.",
+        reply_markup=worker_menu_keyboard(),
+    )

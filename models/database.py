@@ -51,6 +51,8 @@ async def init_database() -> None:
 
             worker_columns = await connection.execute(text("PRAGMA table_info(workers)"))
             worker_names = {row[1] for row in worker_columns.fetchall()}
+            if "ic_number" not in worker_names:
+                await connection.execute(text("ALTER TABLE workers ADD COLUMN ic_number VARCHAR(30)"))
             if "site_id" not in worker_names:
                 await connection.execute(text("ALTER TABLE workers ADD COLUMN site_id INTEGER"))
 
@@ -84,7 +86,7 @@ async def init_database() -> None:
                     text(
                         """
                         UPDATE leave_requests
-                        SET start_date = date_from
+                        SET start_date = CAST(CAST(date_from AS TEXT) AS DATE)
                         WHERE start_date IS NULL
                         """
                     )
@@ -94,7 +96,7 @@ async def init_database() -> None:
                     text(
                         """
                         UPDATE leave_requests
-                        SET end_date = date_to
+                        SET end_date = CAST(CAST(date_to AS TEXT) AS DATE)
                         WHERE end_date IS NULL
                         """
                     )
@@ -125,6 +127,14 @@ async def init_database() -> None:
                     """
                     ALTER TABLE sites
                     ADD COLUMN IF NOT EXISTS telegram_group_id BIGINT
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    ALTER TABLE workers
+                    ADD COLUMN IF NOT EXISTS ic_number VARCHAR(30)
                     """
                 )
             )
@@ -178,7 +188,7 @@ async def init_database() -> None:
                     text(
                         """
                         UPDATE leave_requests
-                        SET start_date = date_from
+                        SET start_date = CAST(CAST(date_from AS TEXT) AS DATE)
                         WHERE start_date IS NULL
                         """
                     )
@@ -188,7 +198,7 @@ async def init_database() -> None:
                     text(
                         """
                         UPDATE leave_requests
-                        SET end_date = date_to
+                        SET end_date = CAST(CAST(date_to AS TEXT) AS DATE)
                         WHERE end_date IS NULL
                         """
                     )

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models.models import AttendanceRecord, LeaveRequest, Site, Worker
+from services.site_service import get_default_site
 
 
 class AttendanceError(ValueError):
@@ -73,6 +74,7 @@ async def create_worker(
     *,
     full_name: str,
     telegram_user_id: int,
+    ic_number: Optional[str],
     employee_code: Optional[str],
     site_id: Optional[int],
     is_active: bool = True,
@@ -84,10 +86,14 @@ async def create_worker(
         site = await session.get(Site, site_id)
         if not site:
             raise AttendanceError("Selected site was not found.")
+    else:
+        default_site = await get_default_site(session)
+        site_id = default_site.id if default_site else None
 
     worker = Worker(
         full_name=full_name.strip(),
         telegram_user_id=telegram_user_id,
+        ic_number=_clean_optional_text(ic_number),
         employee_code=(employee_code or "").strip() or None,
         site_id=site_id,
         is_active=is_active,
@@ -104,6 +110,7 @@ async def update_worker(
     *,
     full_name: str,
     telegram_user_id: int,
+    ic_number: Optional[str],
     employee_code: Optional[str],
     site_id: Optional[int],
     is_active: bool,
@@ -123,12 +130,31 @@ async def update_worker(
 
     worker.full_name = full_name.strip()
     worker.telegram_user_id = telegram_user_id
+    worker.ic_number = _clean_optional_text(ic_number)
     worker.employee_code = (employee_code or "").strip() or None
     worker.site_id = site_id
     worker.is_active = is_active
     await session.commit()
     await session.refresh(worker)
     return worker
+
+
+async def self_register_worker(
+    session: AsyncSession,
+    *,
+    telegram_user_id: int,
+    full_name: str,
+    ic_number: str,
+) -> Worker:
+    return await create_worker(
+        session,
+        full_name=full_name,
+        telegram_user_id=telegram_user_id,
+        ic_number=ic_number,
+        employee_code=None,
+        site_id=None,
+        is_active=True,
+    )
 
 
 async def get_attendance_for_date(

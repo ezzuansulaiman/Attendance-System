@@ -16,6 +16,10 @@
                 <input type="number" name="telegram_user_id" value="{{ worker.telegram_user_id if worker else '' }}" required>
             </label>
             <label>
+                No IC
+                <input type="text" name="ic_number" value="{{ worker.ic_number if worker else '' }}">
+            </label>
+            <label>
                 Employee Code
                 <input type="text" name="employee_code" value="{{ worker.employee_code if worker else '' }}">
             </label>
@@ -52,6 +56,7 @@
                 <tr>
                     <th>Name</th>
                     <th>Telegram ID</th>
+                    <th>No IC</th>
                     <th>Code</th>
                     <th>Site</th>
                     <th>Status</th>
@@ -63,13 +68,14 @@
                 <tr>
                     <td>{{ item.full_name }}</td>
                     <td>{{ item.telegram_user_id }}</td>
+                    <td>{{ item.ic_number or '-' }}</td>
                     <td>{{ item.employee_code or '-' }}</td>
                     <td>{{ item.site.name if item.site else 'Unassigned' }}</td>
                     <td><span class="badge">{{ 'active' if item.is_active else 'inactive' }}</span></td>
                     <td><a class="button secondary" href="{{ request.url_for('workers_edit', worker_id=item.id) }}">Edit</a></td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6">No workers registered yet.</td></tr>
+                <tr><td colspan="7">No workers registered yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

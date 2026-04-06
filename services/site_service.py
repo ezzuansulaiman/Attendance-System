@@ -26,6 +26,13 @@ async def get_site_by_id(session: AsyncSession, site_id: int) -> Optional[Site]:
     return result.scalar_one_or_none()
 
 
+async def get_default_site(session: AsyncSession) -> Optional[Site]:
+    result = await session.execute(
+        select(Site).where(Site.is_active.is_(True)).order_by(Site.id.asc()).limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def create_site(
     session: AsyncSession,
     *,

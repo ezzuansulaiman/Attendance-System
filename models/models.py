@@ -15,6 +15,7 @@ class Worker(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(150))
+    ic_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, index=True)
     employee_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
     site_id: Mapped[Optional[int]] = mapped_column(ForeignKey("sites.id", ondelete="SET NULL"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

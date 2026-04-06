@@ -14,6 +14,14 @@ def worker_menu_text() -> str:
     )
 
 
+def registration_intro_text() -> str:
+    return (
+        "<b>First-Time Registration</b>\n"
+        "Before using attendance, please register first.\n\n"
+        "Send your <b>NAME</b>."
+    )
+
+
 def admin_menu_text() -> str:
     return (
         "<b>Admin Menu</b>\n"
