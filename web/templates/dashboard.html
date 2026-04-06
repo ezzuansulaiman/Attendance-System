@@ -12,6 +12,20 @@
         <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Download PDF</a>
     </form>
 </div>
+<div class="panel" style="margin-bottom: 18px;">
+    <div class="actions" style="justify-content: space-between;">
+        <div>
+            <h2 style="margin: 0 0 6px;">Admin Controls</h2>
+            <p style="margin: 0; color: var(--muted);">Open the main admin pages or act directly on recent items below.</p>
+        </div>
+        <div class="actions">
+            <a class="button secondary" href="{{ request.url_for('workers') }}">Manage Workers</a>
+            <a class="button secondary" href="{{ request.url_for('sites') }}">Manage Sites</a>
+            <a class="button secondary" href="{{ request.url_for('attendance') }}?month={{ current_month() }}&year={{ current_year() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Manage Attendance</a>
+            <a class="button secondary" href="{{ request.url_for('leaves') }}{% if selected_site_id %}?site_id={{ selected_site_id }}{% endif %}">Manage Leaves</a>
+        </div>
+    </div>
+</div>
 <div class="grid cards">
     <div class="card">
         <div class="badge">Active Workers</div>
@@ -44,6 +58,7 @@
                         <th>Check-In</th>
                         <th>Check-Out</th>
                         <th>Notes</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -55,9 +70,10 @@
                         <td>{{ record.check_in_at.strftime('%Y-%m-%d %H:%M') if record.check_in_at else '-' }}</td>
                         <td>{{ record.check_out_at.strftime('%Y-%m-%d %H:%M') if record.check_out_at else '-' }}</td>
                         <td>{{ record.notes or '-' }}</td>
+                        <td><a class="button secondary" href="{{ request.url_for('attendance_edit', record_id=record.id) }}?month={{ record.attendance_date.month }}&year={{ record.attendance_date.year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Edit</a></td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="6">No attendance records yet.</td></tr>
+                    <tr><td colspan="7">No attendance records yet.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -76,6 +92,7 @@
                         <th>Type</th>
                         <th>Dates</th>
                         <th>Status</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -87,9 +104,31 @@
                         <td>{{ leave.leave_type }}</td>
                         <td>{{ leave.start_date }} to {{ leave.end_date }}</td>
                         <td><span class="badge">{{ leave.status }}</span></td>
+                        <td class="actions">
+                            {% if leave.status == 'pending' %}
+                            <form method="post" action="{{ request.url_for('leaves_approve', leave_id=leave.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                                {% if selected_site_id %}
+                                <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                                {% endif %}
+                                <input type="hidden" name="return_to" value="dashboard">
+                                <button type="submit">Approve</button>
+                            </form>
+                            <form method="post" action="{{ request.url_for('leaves_reject', leave_id=leave.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                                {% if selected_site_id %}
+                                <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                                {% endif %}
+                                <input type="hidden" name="return_to" value="dashboard">
+                                <button class="button danger" type="submit">Reject</button>
+                            </form>
+                            {% else %}
+                            <a class="button secondary" href="{{ request.url_for('leaves') }}{% if selected_site_id %}?site_id={{ selected_site_id }}{% endif %}">Open</a>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="6">No leave requests yet.</td></tr>
+                    <tr><td colspan="7">No leave requests yet.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

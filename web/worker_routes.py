@@ -128,3 +128,41 @@ async def workers_update(
                 status_code=400,
             )
     return RedirectResponse(url=request.url_for("workers"), status_code=303)
+
+
+@router.post("/{worker_id}/toggle-active", name="workers_toggle_active")
+async def workers_toggle_active(
+    request: Request,
+    worker_id: int,
+    csrf_token: str = Form(""),
+) -> Response:
+    redirect = require_admin(request)
+    if redirect:
+        return redirect
+
+    async with session_scope() as session:
+        worker = await get_worker_by_id(session, worker_id)
+        if not worker:
+            return RedirectResponse(url=request.url_for("workers"), status_code=303)
+        try:
+            require_csrf(request, csrf_token)
+            await update_worker(
+                session,
+                worker,
+                full_name=worker.full_name,
+                telegram_user_id=worker.telegram_user_id,
+                ic_number=worker.ic_number,
+                employee_code=worker.employee_code,
+                site_id=worker.site_id,
+                is_active=not worker.is_active,
+            )
+        except (AttendanceError, SecurityError) as exc:
+            worker_items = await list_workers(session)
+            sites = await list_sites(session)
+            return templates.TemplateResponse(
+                request,
+                "workers.html",
+                {"workers": worker_items, "worker": None, "sites": sites, "error": str(exc)},
+                status_code=400,
+            )
+    return RedirectResponse(url=request.url_for("workers"), status_code=303)

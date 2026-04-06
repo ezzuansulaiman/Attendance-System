@@ -44,10 +44,16 @@
                         {% if leave.status == 'pending' %}
                         <form method="post" action="{{ request.url_for('leaves_approve', leave_id=leave.id) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                            {% if selected_site_id %}
+                            <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                            {% endif %}
                             <button type="submit">Approve</button>
                         </form>
                         <form method="post" action="{{ request.url_for('leaves_reject', leave_id=leave.id) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                            {% if selected_site_id %}
+                            <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                            {% endif %}
                             <button class="button danger" type="submit">Reject</button>
                         </form>
                         {% else %}

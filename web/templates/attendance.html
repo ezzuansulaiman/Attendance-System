@@ -7,6 +7,11 @@
     {% endif %}
     <form method="post" action="{{ request.url_for('attendance_update', record_id=record.id) if record else request.url_for('attendance_create') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+        <input type="hidden" name="month" value="{{ selected_month }}">
+        <input type="hidden" name="year" value="{{ selected_year }}">
+        {% if selected_site_id %}
+        <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+        {% endif %}
         <div class="form-grid">
             <label>
                 Worker
@@ -38,7 +43,7 @@
         <div class="actions" style="margin-top: 14px;">
             <button type="submit">{{ 'Update Record' if record else 'Save Record' }}</button>
             {% if record %}
-            <a class="button secondary" href="{{ request.url_for('attendance') }}">Cancel</a>
+            <a class="button secondary" href="{{ request.url_for('attendance') }}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Cancel</a>
             {% endif %}
         </div>
     </form>
@@ -83,9 +88,14 @@
                     <td>{{ item.check_out_at.strftime('%Y-%m-%d %H:%M') if item.check_out_at else '-' }}</td>
                     <td>{{ item.notes or '-' }}</td>
                     <td class="actions">
-                        <a class="button secondary" href="{{ request.url_for('attendance_edit', record_id=item.id) }}">Edit</a>
+                        <a class="button secondary" href="{{ request.url_for('attendance_edit', record_id=item.id) }}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Edit</a>
                         <form method="post" action="{{ request.url_for('attendance_delete', record_id=item.id) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                            <input type="hidden" name="month" value="{{ selected_month }}">
+                            <input type="hidden" name="year" value="{{ selected_year }}">
+                            {% if selected_site_id %}
+                            <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                            {% endif %}
                             <button class="button danger" type="submit">Delete</button>
                         </form>
                     </td>

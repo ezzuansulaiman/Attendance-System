@@ -115,3 +115,38 @@ async def sites_update(
                 status_code=400,
             )
     return RedirectResponse(url=request.url_for("sites"), status_code=303)
+
+
+@router.post("/{site_id}/toggle-active", name="sites_toggle_active")
+async def sites_toggle_active(
+    request: Request,
+    site_id: int,
+    csrf_token: str = Form(""),
+) -> Response:
+    redirect = require_admin(request)
+    if redirect:
+        return redirect
+
+    async with session_scope() as session:
+        site = await get_site_by_id(session, site_id)
+        if not site:
+            return RedirectResponse(url=request.url_for("sites"), status_code=303)
+        try:
+            require_csrf(request, csrf_token)
+            await update_site(
+                session,
+                site,
+                name=site.name,
+                code=site.code,
+                telegram_group_id=site.telegram_group_id,
+                is_active=not site.is_active,
+            )
+        except (SiteError, SecurityError) as exc:
+            site_items = await list_sites(session)
+            return templates.TemplateResponse(
+                request,
+                "sites.html",
+                {"sites": site_items, "site": None, "error": str(exc)},
+                status_code=400,
+            )
+    return RedirectResponse(url=request.url_for("sites"), status_code=303)
