@@ -86,8 +86,8 @@
             <input type="number" name="month" value="{{ selected_month }}" min="1" max="12" style="width: 100px;">
             <input type="number" name="year" value="{{ selected_year }}" min="2020" max="2100" style="width: 120px;">
             <button type="submit">Apply Filter</button>
-            <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Submission PDF</a>
-            <a class="button secondary" href="{{ request.url_for('monthly_report_excel') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Submission Excel</a>
+            <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}" download target="_blank" rel="noopener">Submission PDF</a>
+            <a class="button secondary" href="{{ request.url_for('monthly_report_excel') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}" download target="_blank" rel="noopener">Submission Excel</a>
         </form>
     </div>
 </section>

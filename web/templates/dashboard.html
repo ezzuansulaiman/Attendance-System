@@ -26,8 +26,8 @@
                 {% endfor %}
             </select>
             <button type="submit">Apply Filter</button>
-            <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Current PDF</a>
-            <a class="button secondary" href="{{ request.url_for('monthly_report_excel') }}?year={{ current_year() }}&month={{ current_month() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Current Excel</a>
+            <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}" download target="_blank" rel="noopener">Current PDF</a>
+            <a class="button secondary" href="{{ request.url_for('monthly_report_excel') }}?year={{ current_year() }}&month={{ current_month() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}" download target="_blank" rel="noopener">Current Excel</a>
         </form>
     </div>
 </section>
