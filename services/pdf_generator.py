@@ -3,219 +3,297 @@ from __future__ import annotations
 import calendar
 import io
 from typing import Any
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
-PAGE_WIDTH, PAGE_HEIGHT = landscape(A4)
+PAGE_WIDTH, _ = landscape(A4)
 PDF_COPY = {
-    "title": "Monthly Attendance Report",
+    "eyebrow": "MONTHLY ATTENDANCE",
+    "title": "Attendance Report",
+    "subtitle": "Professional monthly workforce attendance register",
     "footer_label": "Attendance Report",
-    "metadata_labels": ("Company", "Name", "Period", "Generated On"),
-    "summary_labels": (
-        "Workers",
-        "Present Days",
-        "Checked-Out Days",
-        "Avg. Present Days",
-        "Completion Rate",
-    ),
+    "metadata_labels": ("Company", "Site", "Period", "Generated On"),
 }
+
+
+def _paragraph(value: Any, style: ParagraphStyle) -> Paragraph:
+    return Paragraph(escape(str(value)), style)
 
 
 def _build_styles() -> dict[str, ParagraphStyle]:
     sample_styles = getSampleStyleSheet()
     return {
+        "eyebrow": ParagraphStyle(
+            "ReportEyebrow",
+            parent=sample_styles["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=7.4,
+            leading=9,
+            textColor=colors.HexColor("#bfdbfe"),
+            alignment=TA_LEFT,
+            spaceAfter=0,
+        ),
         "title": ParagraphStyle(
             "ReportTitle",
             parent=sample_styles["Title"],
             fontName="Helvetica-Bold",
-            fontSize=17,
-            leading=21,
-            textColor=colors.HexColor("#0f172a"),
+            fontSize=20,
+            leading=23,
+            textColor=colors.white,
             alignment=TA_LEFT,
+            spaceAfter=0,
+        ),
+        "subtitle": ParagraphStyle(
+            "ReportSubtitle",
+            parent=sample_styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=8.6,
+            leading=11,
+            textColor=colors.HexColor("#dbeafe"),
+            alignment=TA_LEFT,
+            spaceAfter=0,
+        ),
+        "header_meta_label": ParagraphStyle(
+            "HeaderMetaLabel",
+            parent=sample_styles["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=6.9,
+            leading=8.5,
+            textColor=colors.HexColor("#93c5fd"),
+            alignment=TA_RIGHT,
+            spaceAfter=0,
+        ),
+        "header_meta_value": ParagraphStyle(
+            "HeaderMetaValue",
+            parent=sample_styles["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=9.2,
+            leading=11,
+            textColor=colors.white,
+            alignment=TA_RIGHT,
+            spaceAfter=0,
         ),
         "meta_label": ParagraphStyle(
             "MetaLabel",
             parent=sample_styles["BodyText"],
             fontName="Helvetica-Bold",
-            fontSize=7.2,
-            leading=9,
+            fontSize=6.8,
+            leading=8,
             textColor=colors.HexColor("#64748b"),
             alignment=TA_LEFT,
+            spaceAfter=0,
         ),
         "meta_value": ParagraphStyle(
             "MetaValue",
             parent=sample_styles["BodyText"],
             fontName="Helvetica-Bold",
-            fontSize=9.2,
-            leading=11,
+            fontSize=9.6,
+            leading=11.5,
             textColor=colors.HexColor("#0f172a"),
             alignment=TA_LEFT,
+            spaceAfter=0,
         ),
-        "summary_label": ParagraphStyle(
-            "SummaryLabel",
+        "table_header": ParagraphStyle(
+            "TableHeader",
             parent=sample_styles["BodyText"],
             fontName="Helvetica-Bold",
-            fontSize=7.2,
-            leading=9,
+            fontSize=6.3,
+            leading=7.2,
             textColor=colors.white,
-            alignment=TA_LEFT,
+            alignment=TA_CENTER,
+            spaceAfter=0,
         ),
-        "summary_value": ParagraphStyle(
-            "SummaryValue",
+        "table_cell": ParagraphStyle(
+            "TableCell",
+            parent=sample_styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=6.3,
+            leading=7.4,
+            textColor=colors.HexColor("#1e293b"),
+            alignment=TA_CENTER,
+            spaceAfter=0,
+        ),
+        "table_name": ParagraphStyle(
+            "TableName",
             parent=sample_styles["BodyText"],
             fontName="Helvetica-Bold",
-            fontSize=9.2,
-            leading=11,
+            fontSize=6.5,
+            leading=7.6,
             textColor=colors.HexColor("#0f172a"),
             alignment=TA_LEFT,
+            spaceAfter=0,
+        ),
+        "table_total": ParagraphStyle(
+            "TableTotal",
+            parent=sample_styles["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=6.4,
+            leading=7.4,
+            textColor=colors.HexColor("#0f172a"),
+            alignment=TA_CENTER,
+            spaceAfter=0,
         ),
     }
 
 
+def _build_header_band(*, report: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
+    period_value = _paragraph(report["period_label"], styles["header_meta_value"])
+    site_value = _paragraph(report["site_name"], styles["header_meta_value"])
+    left_column = [
+        _paragraph(PDF_COPY["eyebrow"], styles["eyebrow"]),
+        _paragraph(PDF_COPY["title"], styles["title"]),
+        _paragraph(PDF_COPY["subtitle"], styles["subtitle"]),
+    ]
+    right_column = [
+        _paragraph("Reporting Period", styles["header_meta_label"]),
+        period_value,
+        Spacer(1, 4),
+        _paragraph("Site", styles["header_meta_label"]),
+        site_value,
+    ]
+    header = Table([[left_column, right_column]], colWidths=[163 * mm, 92 * mm])
+    header.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#0f2744")),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#0b1f34")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 12),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+                ("TOPPADDING", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    return header
+
+
 def _build_metadata_table(*, report: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
     company_label, site_label, period_label, generated_label = PDF_COPY["metadata_labels"]
-    metadata_rows = [
+    metadata_cells = [
         [
-            Paragraph(company_label, styles["meta_label"]),
-            Paragraph(site_label, styles["meta_label"]),
-            Paragraph(period_label, styles["meta_label"]),
-            Paragraph(generated_label, styles["meta_label"]),
+            _paragraph(company_label, styles["meta_label"]),
+            _paragraph(report["company_name"], styles["meta_value"]),
         ],
         [
-            Paragraph(str(report["company_name"]), styles["meta_value"]),
-            Paragraph(str(report["site_name"]), styles["meta_value"]),
-            Paragraph(str(report["period_label"]), styles["meta_value"]),
-            Paragraph(str(report["generated_at"]), styles["meta_value"]),
+            _paragraph(site_label, styles["meta_label"]),
+            _paragraph(report["site_name"], styles["meta_value"]),
+        ],
+        [
+            _paragraph(period_label, styles["meta_label"]),
+            _paragraph(report["period_label"], styles["meta_value"]),
+        ],
+        [
+            _paragraph(generated_label, styles["meta_label"]),
+            _paragraph(report["generated_at"], styles["meta_value"]),
         ],
     ]
-    metadata_table = Table(metadata_rows, colWidths=[72 * mm, 52 * mm, 56 * mm, 46 * mm])
+    metadata_table = Table([metadata_cells], colWidths=[63 * mm, 56 * mm, 63 * mm, 73 * mm])
     metadata_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
-                ("BACKGROUND", (0, 1), (-1, 1), colors.white),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dbe4ee")),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+                ("BOX", (0, 0), (-1, -1), 0.45, colors.HexColor("#cbd5e1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#dbe4ee")),
+                ("LINEABOVE", (0, 0), (-1, 0), 1.1, colors.HexColor("#1d4ed8")),
                 ("LEFTPADDING", (0, 0), (-1, -1), 8),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, 0), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
-                ("TOPPADDING", (0, 1), (-1, 1), 7),
-                ("BOTTOMPADDING", (0, 1), (-1, 1), 7),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ]
         )
     )
     return metadata_table
 
 
-def _build_summary_table(*, summary: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
-    workers_label, present_label, checked_out_label, avg_label, completion_label = PDF_COPY["summary_labels"]
-    summary_rows = [
-        [
-            Paragraph(workers_label, styles["summary_label"]),
-            Paragraph(present_label, styles["summary_label"]),
-            Paragraph(checked_out_label, styles["summary_label"]),
-            Paragraph(avg_label, styles["summary_label"]),
-            Paragraph(completion_label, styles["summary_label"]),
-        ],
-        [
-            Paragraph(str(summary["total_workers"]), styles["summary_value"]),
-            Paragraph(str(summary["total_present_days"]), styles["summary_value"]),
-            Paragraph(str(summary["total_completed_days"]), styles["summary_value"]),
-            Paragraph(str(summary["average_present_days"]), styles["summary_value"]),
-            Paragraph(f'{summary["completion_rate"]}%', styles["summary_value"]),
-        ],
-    ]
-    summary_table = Table(summary_rows, colWidths=[45.2 * mm] * 5)
-    summary_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#334155")),
-                ("BACKGROUND", (0, 1), (-1, 1), colors.white),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dbe4ee")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, 0), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
-                ("TOPPADDING", (0, 1), (-1, 1), 7),
-                ("BOTTOMPADDING", (0, 1), (-1, 1), 7),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ]
-        )
-    )
-    return summary_table
-
-
-def _build_attendance_table(*, report: dict[str, Any]) -> Table:
+def _build_attendance_table(*, report: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
     year = int(report["year"])
     month = int(report["month"])
+    days_in_month = calendar.monthrange(year, month)[1]
     rows = list(report["rows"])
-    table_data: list[list[str]] = [
-        ["No", "Employee Name", "Code"] + [str(day) for day in range(1, 32)] + ["Present", "Complete"]
+    table_data: list[list[Any]] = [
+        [
+            _paragraph("No", styles["table_header"]),
+            _paragraph("Employee Name", styles["table_header"]),
+            _paragraph("Code", styles["table_header"]),
+            *[_paragraph(str(day), styles["table_header"]) for day in range(1, 32)],
+            _paragraph("Present", styles["table_header"]),
+            _paragraph("Complete", styles["table_header"]),
+        ]
     ]
 
     for index, row in enumerate(rows, start=1):
         table_data.append(
             [
-                str(index),
-                str(row["worker_name"]),
-                str(row["employee_code"]),
-                *[str(value) for value in row["days"]],
-                str(row["present_days"]),
-                str(row["completed_days"]),
+                _paragraph(index, styles["table_cell"]),
+                _paragraph(row["worker_name"], styles["table_name"]),
+                _paragraph(row["employee_code"], styles["table_cell"]),
+                *[_paragraph(value or "", styles["table_cell"]) for value in row["days"]],
+                _paragraph(row["present_days"], styles["table_total"]),
+                _paragraph(row["completed_days"], styles["table_total"]),
             ]
         )
 
-    table = Table(table_data, colWidths=[18, 144, 48] + [13.2] * 31 + [30, 34], repeatRows=1)
+    if not rows:
+        table_data.append(
+            [
+                "",
+                _paragraph("No active workers were found for the selected period.", styles["table_name"]),
+                "",
+                *([""] * 31),
+                "",
+                "",
+            ]
+        )
+
+    table = Table(table_data, colWidths=[21, 158, 48] + [12.6] * 31 + [34, 38], repeatRows=1)
     style_commands: list[tuple[Any, ...]] = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f3b57")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#12304f")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 6.7),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("BOX", (0, 0), (-1, -1), 0.45, colors.HexColor("#cbd5e1")),
         ("INNERGRID", (0, 0), (-1, -1), 0.22, colors.HexColor("#dde5ee")),
-        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 1), (-1, -1), 6.4),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
-        ("TOPPADDING", (0, 0), (-1, 0), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
-        ("TOPPADDING", (0, 1), (-1, -1), 4.5),
-        ("BOTTOMPADDING", (0, 1), (-1, -1), 4.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2.5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2.5),
+        ("TOPPADDING", (0, 0), (-1, 0), 6.5),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 6.5),
+        ("TOPPADDING", (0, 1), (-1, -1), 4.8),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), 4.8),
         ("ALIGN", (1, 1), (1, -1), "LEFT"),
-        ("LEFTPADDING", (1, 1), (1, -1), 5),
+        ("LEFTPADDING", (1, 1), (1, -1), 5.5),
+        ("BACKGROUND", (0, 1), (2, -1), colors.HexColor("#f8fafc")),
+        ("BACKGROUND", (-2, 1), (-1, -1), colors.HexColor("#eff6ff")),
     ]
 
     for row_index in range(1, len(table_data)):
-        row_background = "#ffffff" if row_index % 2 else "#f7fafc"
-        style_commands.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor(row_background)))
-
-    style_commands.extend(
-        [
-            ("BACKGROUND", (-2, 0), (-1, -1), colors.HexColor("#eef4fa")),
-            ("FONTNAME", (-2, 1), (-1, -1), "Helvetica-Bold"),
-        ]
-    )
+        row_background = "#ffffff" if row_index % 2 else "#f8fbff"
+        style_commands.append(("BACKGROUND", (3, row_index), (-3, row_index), colors.HexColor(row_background)))
 
     for day in range(1, 32):
         column_index = 2 + day
-        if day > calendar.monthrange(year, month)[1]:
-            style_commands.append(("BACKGROUND", (column_index, 0), (column_index, -1), colors.HexColor("#e5e7eb")))
-            style_commands.append(("TEXTCOLOR", (column_index, 1), (column_index, -1), colors.HexColor("#94a3b8")))
+        if day > days_in_month:
+            style_commands.extend(
+                [
+                    ("BACKGROUND", (column_index, 1), (column_index, -1), colors.HexColor("#e5e7eb")),
+                    ("TEXTCOLOR", (column_index, 1), (column_index, -1), colors.HexColor("#94a3b8")),
+                    ("BACKGROUND", (column_index, 0), (column_index, 0), colors.HexColor("#64748b")),
+                ]
+            )
             continue
         if calendar.weekday(year, month, day) >= 5:
-            style_commands.append(("BACKGROUND", (column_index, 0), (column_index, -1), colors.HexColor("#f1f5f9")))
+            style_commands.append(
+                ("BACKGROUND", (column_index, 1), (column_index, -1), colors.HexColor("#f1f5f9"))
+            )
 
     table.setStyle(TableStyle(style_commands))
     return table
@@ -247,13 +325,11 @@ def build_monthly_attendance_pdf(*, report: dict[str, Any]) -> bytes:
     )
     styles = _build_styles()
     story = [
-        Paragraph(str(PDF_COPY["title"]), styles["title"]),
+        _build_header_band(report=report, styles=styles),
         Spacer(1, 8),
         _build_metadata_table(report=report, styles=styles),
         Spacer(1, 10),
-        _build_summary_table(summary=report["summary"], styles=styles),
-        Spacer(1, 10),
-        _build_attendance_table(report=report),
+        _build_attendance_table(report=report, styles=styles),
     ]
     document.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     return buffer.getvalue()
