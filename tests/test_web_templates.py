@@ -63,14 +63,45 @@ def test_dashboard_template_renders_primary_actions() -> None:
 
 
 def test_attendance_template_renders_submission_actions() -> None:
+    site = SimpleNamespace(id=1, name="Sepang")
+    worker = SimpleNamespace(id=1, full_name="Worker One", employee_code="EMP001", site=site)
     html = _render(
         "attendance.html",
         "/attendance",
         error=None,
         record=None,
+        attendance_grid={
+            "days": [{"day": 1, "weekday_label": "Mon", "is_weekend": False}],
+            "rows": [
+                {
+                    "worker": worker,
+                    "cells": [
+                        {
+                            "record": None,
+                            "leave_request": None,
+                            "day": 1,
+                            "date_iso": "2026-04-01",
+                            "status_class": "is-empty",
+                            "symbol": "-",
+                            "has_note": False,
+                            "status_label": "Empty",
+                            "time_summary": "",
+                            "day_label": "1 Mon",
+                            "is_weekend": False,
+                            "entry_mode": "attendance",
+                            "notes_value": "",
+                            "leave_locked": False,
+                            "leave_message": "",
+                        }
+                    ],
+                    "present_days": 0,
+                    "completed_days": 0,
+                }
+            ],
+        },
         records=[],
-        workers=[SimpleNamespace(id=1, full_name="Worker One")],
-        sites=[SimpleNamespace(id=1, name="Sepang")],
+        workers=[worker],
+        sites=[site],
         selected_month=4,
         selected_year=2026,
         selected_site_id=1,
@@ -79,10 +110,68 @@ def test_attendance_template_renders_submission_actions() -> None:
 
     assert "Submission PDF" in html
     assert "Submission Excel" in html
+    assert "Monthly Grid" in html
+    assert "Spreadsheet-style editing" in html
+    assert "grid-checkin-1-1" in html
+    assert "Annual Leave" in html
+    assert "MC" in html
+    assert "Public Holiday" in html
+    assert "EMP001" in html
     assert "/reports/monthly" in html
     assert "site_id=1" in html
     assert 'target="_blank"' not in html
     assert ' download' not in html
+
+
+def test_attendance_template_renders_leave_grid_cells() -> None:
+    site = SimpleNamespace(id=1, name="Sepang")
+    worker = SimpleNamespace(id=1, full_name="Worker One", employee_code="EMP001", site=site)
+    html = _render(
+        "attendance.html",
+        "/attendance",
+        error=None,
+        record=None,
+        attendance_grid={
+            "days": [{"day": 2, "weekday_label": "Tue", "is_weekend": False}],
+            "rows": [
+                {
+                    "worker": worker,
+                    "cells": [
+                        {
+                            "record": None,
+                            "leave_request": SimpleNamespace(id=9, leave_type="mc"),
+                            "day": 2,
+                            "date_iso": "2026-04-02",
+                            "status_class": "is-leave is-mc",
+                            "symbol": "MC",
+                            "has_note": True,
+                            "status_label": "Cuti Sakit",
+                            "time_summary": "Approved leave",
+                            "day_label": "2 Tue",
+                            "is_weekend": False,
+                            "entry_mode": "mc",
+                            "notes_value": "Medical leave",
+                            "leave_locked": False,
+                            "leave_message": "",
+                        }
+                    ],
+                    "present_days": 0,
+                    "completed_days": 0,
+                }
+            ],
+        },
+        records=[],
+        workers=[worker],
+        sites=[site],
+        selected_month=4,
+        selected_year=2026,
+        selected_site_id=1,
+        form_data={},
+    )
+
+    assert "Cuti Sakit" in html
+    assert "Approved leave" in html
+    assert "attendance/grid/save" in html
 
 
 def test_workers_sites_and_leaves_templates_render_navigation_actions() -> None:

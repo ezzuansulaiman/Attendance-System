@@ -72,6 +72,7 @@ class Site(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     workers: Mapped[list[Worker]] = relationship(back_populates="site")
+    public_holidays: Mapped[list["PublicHoliday"]] = relationship(back_populates="site")
 
 
 class LeaveRequest(Base):
@@ -91,3 +92,16 @@ class LeaveRequest(Base):
     review_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     worker: Mapped[Worker] = relationship(back_populates="leave_requests")
+
+
+class PublicHoliday(Base):
+    __tablename__ = "public_holidays"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(150))
+    holiday_date: Mapped[date] = mapped_column(Date, index=True)
+    site_id: Mapped[Optional[int]] = mapped_column(ForeignKey("sites.id", ondelete="SET NULL"), nullable=True, index=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    site: Mapped[Optional[Site]] = relationship(back_populates="public_holidays")

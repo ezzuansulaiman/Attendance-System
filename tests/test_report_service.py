@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from models.database import Base
-from models.models import AttendanceRecord, Site, Worker
+from models.models import AttendanceRecord, PublicHoliday, Site, Worker
 from services.report_service import build_monthly_attendance_report
 
 
@@ -58,6 +58,11 @@ async def _test_build_monthly_attendance_report_defaults_to_sepang_scope(tmp_pat
                         attendance_date=date(2026, 4, 1),
                         check_in_at=datetime(2026, 4, 1, 8, 30),
                     ),
+                    PublicHoliday(
+                        name="Labour Day",
+                        holiday_date=date(2026, 4, 2),
+                        site_id=sepang.id,
+                    ),
                 ]
             )
             await session.commit()
@@ -77,5 +82,6 @@ async def _test_build_monthly_attendance_report_defaults_to_sepang_scope(tmp_pat
             assert report["site_name"] == "Sepang Region"
             assert [row["worker_name"] for row in report["rows"]] == ["Sepang Worker"]
             assert [row["worker_name"] for row in report["detail_rows"]] == ["Sepang Worker"]
+            assert report["rows"][0]["days"][1] == "PH"
     finally:
         await engine.dispose()

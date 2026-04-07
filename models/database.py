@@ -165,6 +165,21 @@ async def init_database() -> None:
                         """
                     )
                 )
+            public_holiday_names = await _sqlite_column_names(connection, "public_holidays")
+            for column_name, column_type in (
+                ("name", "VARCHAR(150)"),
+                ("holiday_date", "DATE"),
+                ("site_id", "INTEGER"),
+                ("notes", "TEXT"),
+                ("created_at", "DATETIME"),
+            ):
+                public_holiday_names = await _sqlite_add_column_if_missing(
+                    connection,
+                    table_name="public_holidays",
+                    column_names=public_holiday_names,
+                    column_name=column_name,
+                    column_type=column_type,
+                )
         elif dialect == "postgresql":
             await connection.execute(
                 text(
@@ -211,6 +226,21 @@ async def init_database() -> None:
                     text(
                         f"""
                         ALTER TABLE leave_requests
+                        ADD COLUMN IF NOT EXISTS {column_name} {column_type}
+                        """
+                    )
+                )
+            for column_name, column_type in (
+                ("name", "VARCHAR(150)"),
+                ("holiday_date", "DATE"),
+                ("site_id", "INTEGER"),
+                ("notes", "TEXT"),
+                ("created_at", "TIMESTAMP WITH TIME ZONE"),
+            ):
+                await connection.execute(
+                    text(
+                        f"""
+                        ALTER TABLE public_holidays
                         ADD COLUMN IF NOT EXISTS {column_name} {column_type}
                         """
                     )

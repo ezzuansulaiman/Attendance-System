@@ -159,21 +159,28 @@ def build_today_status_text(
     check_in_at: Optional[datetime],
     check_out_at: Optional[datetime],
     approved_leave_label: Optional[str],
+    public_holiday_label: Optional[str] = None,
 ) -> str:
     site_line = site_name or "Belum ditetapkan"
     if approved_leave_label:
         status_line = f"Cuti Diluluskan ({approved_leave_label})"
+    elif public_holiday_label and not check_in_at and not check_out_at:
+        status_line = f"Cuti Umum ({public_holiday_label})"
     elif check_in_at and check_out_at:
         status_line = "Lengkap"
     elif check_in_at:
         status_line = "Sudah Rekod Masuk"
     else:
         status_line = "Belum Rekod Masuk"
+    public_holiday_line = ""
+    if public_holiday_label:
+        public_holiday_line = f"Cuti Umum: {public_holiday_label}\n"
     return (
         "<b>Status Hari Ini</b>\n"
         f"Nama: {worker_name}\n"
         f"Site: {site_line}\n"
         f"Status: {status_line}\n"
+        f"{public_holiday_line}"
         f"Rekod Masuk: {format_display_datetime(check_in_at) if check_in_at else '-'}\n"
         f"Rekod Keluar: {format_display_datetime(check_out_at) if check_out_at else '-'}"
     )
@@ -200,6 +207,31 @@ def build_attendance_sync_text(
         f"Tindakan: {action_map.get(action, action)} dari dashboard admin web\n"
         f"Rekod Masuk: {format_display_datetime(check_in_at) if check_in_at else '-'}\n"
         f"Rekod Keluar: {format_display_datetime(check_out_at) if check_out_at else '-'}"
+        f"{notes_line}"
+    )
+
+
+def build_public_holiday_sync_text(
+    *,
+    holiday_date: date,
+    holiday_name: str,
+    site_name: Optional[str],
+    notes: Optional[str],
+    action: str,
+) -> str:
+    action_map = {
+        "created": "direkodkan",
+        "saved": "dikemaskini",
+        "deleted": "dipadam",
+    }
+    scope_line = site_name or "Semua site"
+    notes_line = f"\nCatatan: {html.escape(notes)}" if notes else ""
+    return (
+        "<b>Kemas Kini Cuti Umum</b>\n"
+        f"Tarikh: {format_display_date(holiday_date)}\n"
+        f"Nama: {html.escape(holiday_name)}\n"
+        f"Skop: {html.escape(scope_line)}\n"
+        f"Tindakan: {action_map.get(action, action)} dari dashboard admin web"
         f"{notes_line}"
     )
 

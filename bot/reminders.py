@@ -16,6 +16,7 @@ from models import session_scope
 from models.models import AttendanceRecord, Site, Worker
 from services.attendance_service import list_active_workers, list_attendance_for_date
 from services.leave_service import approved_leaves_in_range
+from services.public_holiday_service import list_public_holidays_in_range
 from services.site_service import list_sites
 
 logger = logging.getLogger(__name__)
@@ -86,11 +87,12 @@ def pending_worker_names(
     workers: Sequence[Worker],
     attendance_lookup: dict[int, AttendanceRecord],
     approved_leave_worker_ids: set[int],
+    public_holiday_worker_ids: set[int],
 ) -> list[str]:
     names: list[str] = []
     for worker in workers:
         if reminder_type == "checkin":
-            if worker.id in approved_leave_worker_ids:
+            if worker.id in approved_leave_worker_ids or worker.id in public_holiday_worker_ids:
                 continue
             record = attendance_lookup.get(worker.id)
             if record and record.check_in_at:
@@ -134,6 +136,22 @@ def due_reminder_targets(
     return due
 
 
+def public_holiday_worker_ids_for_date(
+    *,
+    workers: Sequence[Worker],
+    public_holidays: Sequence[object],
+    target_date: date,
+) -> set[int]:
+    holiday_sites = {holiday.site_id for holiday in public_holidays if holiday.holiday_date == target_date}
+    if None in holiday_sites:
+        return {worker.id for worker in workers}
+    worker_ids: set[int] = set()
+    for worker in workers:
+        if worker.site_id in holiday_sites:
+            worker_ids.add(worker.id)
+    return worker_ids
+
+
 async def resolve_reminder_chat_ids(settings: Settings) -> tuple[int, ...]:
     async with session_scope() as session:
         sites = await list_sites(session, active_only=True)
@@ -158,11 +176,17 @@ async def pending_worker_names_for_chat(
         approved_leave_worker_ids = {
             leave.worker_id for leave in await approved_leaves_in_range(session, start_date=target_date, end_date=target_date)
         }
+        public_holiday_worker_ids = public_holiday_worker_ids_for_date(
+            workers=workers_for_chat,
+            public_holidays=await list_public_holidays_in_range(session, start_date=target_date, end_date=target_date),
+            target_date=target_date,
+        )
     return pending_worker_names(
         reminder_type=reminder_type,
         workers=workers_for_chat,
         attendance_lookup=attendance_lookup,
         approved_leave_worker_ids=approved_leave_worker_ids,
+        public_holiday_worker_ids=public_holiday_worker_ids,
     )
 
 

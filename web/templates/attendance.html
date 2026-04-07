@@ -1,6 +1,286 @@
 {% extends "base.html" %}
 {% block title %}Attendance | Attendance Command Center{% endblock %}
 {% block content %}
+<style>
+    .matrix-wrap {
+        overflow-x: auto;
+        border: 1px solid rgba(44, 66, 51, 0.08);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.78);
+    }
+
+    .monthly-grid-table {
+        min-width: max-content;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .monthly-grid-table th,
+    .monthly-grid-table td {
+        min-width: 116px;
+        padding: 10px;
+        vertical-align: top;
+        border-bottom: 1px solid rgba(44, 66, 51, 0.08);
+        border-right: 1px solid rgba(44, 66, 51, 0.06);
+    }
+
+    .monthly-grid-table th.matrix-worker-col,
+    .monthly-grid-table td.matrix-worker-col {
+        position: sticky;
+        left: 0;
+        z-index: 3;
+        min-width: 240px;
+        max-width: 240px;
+        background: linear-gradient(180deg, #fffdfa 0%, #f7efe1 100%);
+    }
+
+    .monthly-grid-table th.matrix-total-col,
+    .monthly-grid-table td.matrix-total-col {
+        min-width: 94px;
+        text-align: center;
+        background: rgba(237, 245, 239, 0.85);
+    }
+
+    .monthly-grid-table th.is-weekend {
+        background: linear-gradient(180deg, #fbf3e7 0%, #f3e6d1 100%);
+    }
+
+    .monthly-grid-table td.is-weekend {
+        background: rgba(250, 244, 234, 0.78);
+    }
+
+    .monthly-grid-table tbody tr:hover td.matrix-worker-col {
+        background: linear-gradient(180deg, #fffdfa 0%, #eef6ef 100%);
+    }
+
+    .monthly-grid-table tbody tr:hover td.matrix-total-col {
+        background: rgba(226, 241, 231, 0.95);
+    }
+
+    .matrix-worker {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    .matrix-employee-code {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 2px;
+        color: var(--ink-muted);
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+
+    details.matrix-cell {
+        border: 1px solid rgba(44, 66, 51, 0.10);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: var(--shadow-sm);
+    }
+
+    details.matrix-cell[open] {
+        border-color: rgba(67, 106, 82, 0.22);
+        box-shadow: 0 18px 28px rgba(36, 70, 50, 0.12);
+    }
+
+    .matrix-cell.is-empty {
+        background: rgba(255, 255, 255, 0.92);
+    }
+
+    .matrix-cell.is-present {
+        background: linear-gradient(180deg, #f5fbf7 0%, #edf8f1 100%);
+    }
+
+    .matrix-cell.is-complete {
+        background: linear-gradient(180deg, #edf8f1 0%, #e4f5eb 100%);
+    }
+
+    .matrix-cell.is-recorded {
+        background: linear-gradient(180deg, #fff9ef 0%, #fff3e1 100%);
+    }
+
+    .matrix-cell.is-leave,
+    .matrix-cell.is-annual {
+        background: linear-gradient(180deg, #f6f0ff 0%, #efe6fb 100%);
+    }
+
+    .matrix-cell.is-mc {
+        background: linear-gradient(180deg, #eef9ff 0%, #e2f2fb 100%);
+    }
+
+    .matrix-cell.is-emergency {
+        background: linear-gradient(180deg, #fff4ef 0%, #ffe9de 100%);
+    }
+
+    .matrix-cell.is-public-holiday {
+        background: linear-gradient(180deg, #fff7df 0%, #ffeec0 100%);
+    }
+
+    .matrix-trigger {
+        list-style: none;
+        display: grid;
+        gap: 6px;
+        padding: 10px;
+        cursor: pointer;
+    }
+
+    .matrix-trigger::-webkit-details-marker {
+        display: none;
+    }
+
+    .matrix-symbol-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .matrix-symbol {
+        color: var(--primary);
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .matrix-note {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        min-height: 24px;
+        padding: 4px 7px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .matrix-status {
+        color: var(--ink);
+        font-size: 0.82rem;
+        font-weight: 700;
+        line-height: 1.35;
+    }
+
+    .matrix-time {
+        color: var(--ink-muted);
+        font-size: 0.76rem;
+        line-height: 1.4;
+    }
+
+    .matrix-editor {
+        display: grid;
+        gap: 10px;
+        padding: 0 10px 10px;
+    }
+
+    .matrix-editor .field {
+        gap: 6px;
+    }
+
+    .matrix-editor label {
+        font-size: 0.78rem;
+    }
+
+    .matrix-editor .table-input,
+    .matrix-editor .table-select,
+    .matrix-editor .table-textarea {
+        font-size: 0.82rem;
+    }
+
+    .matrix-editor .table-textarea {
+        min-height: 76px;
+    }
+
+    .matrix-editor-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .matrix-editor-actions .button,
+    .matrix-editor-actions button {
+        min-height: 38px;
+        padding: 9px 11px;
+        border-radius: 12px;
+        font-size: 0.82rem;
+        box-shadow: none;
+    }
+
+    .matrix-lock {
+        color: var(--warning);
+        font-size: 0.76rem;
+        font-weight: 700;
+        line-height: 1.45;
+    }
+
+    .matrix-total {
+        display: grid;
+        gap: 4px;
+        justify-items: center;
+    }
+
+    .matrix-total strong {
+        font-size: 1rem;
+        letter-spacing: -0.04em;
+    }
+
+    .matrix-total span {
+        color: var(--ink-muted);
+        font-size: 0.74rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    @media (max-width: 760px) {
+        .matrix-wrap {
+            overflow-x: auto;
+            border: 1px solid rgba(44, 66, 51, 0.08);
+            background: rgba(255, 255, 255, 0.78);
+        }
+
+        .monthly-grid-table,
+        .monthly-grid-table thead,
+        .monthly-grid-table tbody,
+        .monthly-grid-table tr,
+        .monthly-grid-table th,
+        .monthly-grid-table td {
+            display: table-cell;
+            width: auto;
+        }
+
+        .monthly-grid-table {
+            display: table;
+        }
+
+        .monthly-grid-table thead {
+            display: table-header-group;
+        }
+
+        .monthly-grid-table tbody {
+            display: table-row-group;
+        }
+
+        .monthly-grid-table tr {
+            display: table-row;
+            border: none;
+            box-shadow: none;
+            background: transparent;
+        }
+
+        .monthly-grid-table td::before {
+            content: none;
+        }
+    }
+</style>
+
 <section class="page-header fade-in">
     <div>
         <p class="eyebrow">Attendance Workspace</p>
@@ -17,6 +297,140 @@
             <h3 style="color: #fff;">Best when used monthly</h3>
             <p style="color: rgba(255, 255, 255, 0.78);">Use the month filter first, then create or clean up records so the exported PDF and Excel always match what you reviewed.</p>
         </div>
+    </div>
+</section>
+
+<section class="panel fade-in delay-1">
+    <div class="panel-header">
+        <div>
+            <h2>Monthly Grid</h2>
+            <p>Review one month at a time by site, then open any worker-day cell to create, update, or clear attendance without leaving the page.</p>
+        </div>
+        <span class="mini-badge neutral">Spreadsheet-style editing</span>
+    </div>
+    <p class="helper" style="margin-bottom: 14px;">Each cell represents one worker on one day. Open the cell to edit the check-in, check-out, and notes for that exact date.</p>
+    <div class="matrix-wrap">
+        <table class="monthly-grid-table">
+            <thead>
+                <tr>
+                    <th class="matrix-worker-col">Worker</th>
+                    {% for day in attendance_grid.days %}
+                    <th class="{% if day.is_weekend %}is-weekend{% endif %}">
+                        <div>{{ day.day }}</div>
+                        <div class="table-helper">{{ day.weekday_label }}</div>
+                    </th>
+                    {% endfor %}
+                    <th class="matrix-total-col">Present</th>
+                    <th class="matrix-total-col">Complete</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in attendance_grid.rows %}
+                <tr>
+                    <td class="matrix-worker-col">
+                        <div class="matrix-worker">
+                            <div class="cell-title">{{ row.worker.full_name }}</div>
+                            <div class="matrix-employee-code">
+                                {{ row.worker.employee_code or 'No code' }}
+                                {% if row.worker.site %}| {{ row.worker.site.name }}{% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    {% for cell in row.cells %}
+                    <td class="{% if cell.is_weekend %}is-weekend{% endif %}">
+                        <details class="matrix-cell {{ cell.status_class }}">
+                            <summary class="matrix-trigger">
+                                <div class="matrix-symbol-row">
+                                    <span class="matrix-symbol">{{ cell.symbol }}</span>
+                                    {% if cell.has_note %}
+                                    <span class="matrix-note">Note</span>
+                                    {% endif %}
+                                </div>
+                                <div class="matrix-status">{{ cell.status_label }}</div>
+                                <div class="matrix-time">{{ cell.time_summary or cell.day_label }}</div>
+                            </summary>
+
+                            <form class="matrix-editor" method="post" action="{{ request.url_for('attendance_grid_save') }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                                <input type="hidden" name="month" value="{{ selected_month }}">
+                                <input type="hidden" name="year" value="{{ selected_year }}">
+                                <input type="hidden" name="worker_id" value="{{ row.worker.id }}">
+                                <input type="hidden" name="attendance_date" value="{{ cell.date_iso }}">
+                                {% if selected_site_id %}
+                                <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                                {% endif %}
+
+                                <div class="field">
+                                    <label for="grid-mode-{{ row.worker.id }}-{{ cell.day }}">Day Mode</label>
+                                    <select class="table-select" id="grid-mode-{{ row.worker.id }}-{{ cell.day }}" name="entry_mode" {% if cell.leave_locked %}disabled{% endif %}>
+                                        <option value="attendance" {% if cell.entry_mode == 'attendance' %}selected{% endif %}>Attendance</option>
+                                        <option value="annual" {% if cell.entry_mode == 'annual' %}selected{% endif %}>Annual Leave</option>
+                                        <option value="mc" {% if cell.entry_mode == 'mc' %}selected{% endif %}>MC</option>
+                                        <option value="emergency" {% if cell.entry_mode == 'emergency' %}selected{% endif %}>Emergency Leave</option>
+                                        <option value="public_holiday" {% if cell.entry_mode == 'public_holiday' %}selected{% endif %}>Public Holiday</option>
+                                        <option value="clear">Clear Day</option>
+                                    </select>
+                                    {% if cell.leave_locked %}
+                                    <input type="hidden" name="entry_mode" value="{{ cell.entry_mode }}">
+                                    {% endif %}
+                                </div>
+                                <div class="field">
+                                    <label for="grid-checkin-{{ row.worker.id }}-{{ cell.day }}">Check-In</label>
+                                    <input class="table-input" id="grid-checkin-{{ row.worker.id }}-{{ cell.day }}" type="datetime-local" name="check_in_at" value="{{ cell.record.check_in_at|datetime_local_value if cell.record and cell.record.check_in_at else '' }}" {% if cell.leave_locked %}disabled{% endif %}>
+                                </div>
+                                <div class="field">
+                                    <label for="grid-checkout-{{ row.worker.id }}-{{ cell.day }}">Check-Out</label>
+                                    <input class="table-input" id="grid-checkout-{{ row.worker.id }}-{{ cell.day }}" type="datetime-local" name="check_out_at" value="{{ cell.record.check_out_at|datetime_local_value if cell.record and cell.record.check_out_at else '' }}" {% if cell.leave_locked %}disabled{% endif %}>
+                                </div>
+                                <div class="field">
+                                    <label for="grid-notes-{{ row.worker.id }}-{{ cell.day }}">Notes / Reason / Holiday Name</label>
+                                    <textarea class="table-textarea" id="grid-notes-{{ row.worker.id }}-{{ cell.day }}" name="notes" placeholder="Attendance note, leave reason, or public holiday name" {% if cell.leave_locked %}disabled{% endif %}>{{ cell.notes_value }}</textarea>
+                                </div>
+                                {% if cell.leave_locked %}
+                                <div class="matrix-lock">{{ cell.leave_message }}</div>
+                                {% endif %}
+                                <div class="matrix-editor-actions">
+                                    <button type="submit" {% if cell.leave_locked %}disabled{% endif %}>Save Day</button>
+                                    <button class="secondary" type="reset" {% if cell.leave_locked %}disabled{% endif %}>Reset</button>
+                                </div>
+                            </form>
+
+                            {% if cell.record and not cell.leave_locked %}
+                            <form id="matrix-delete-{{ row.worker.id }}-{{ cell.day }}" method="post" action="{{ request.url_for('attendance_delete', record_id=cell.record.id) }}" onsubmit="return confirm('Delete this attendance record?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                                <input type="hidden" name="month" value="{{ selected_month }}">
+                                <input type="hidden" name="year" value="{{ selected_year }}">
+                                {% if selected_site_id %}
+                                <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                                {% endif %}
+                            </form>
+                            {% endif %}
+                        </details>
+                    </td>
+                    {% endfor %}
+                    <td class="matrix-total-col">
+                        <div class="matrix-total">
+                            <strong>{{ row.present_days }}</strong>
+                            <span>Days</span>
+                        </div>
+                    </td>
+                    <td class="matrix-total-col">
+                        <div class="matrix-total">
+                            <strong>{{ row.completed_days }}</strong>
+                            <span>Done</span>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ attendance_grid.days|length + 3 }}" class="empty-state">
+                        <strong>No workers found</strong>
+                        Try another site or month, or add worker records before using the monthly grid.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </section>
 
@@ -210,7 +624,7 @@
                                 <option value="{{ worker_item.id }}" {% if worker_item.id == item.worker_id %}selected{% endif %}>{{ worker_item.full_name }}</option>
                                 {% endfor %}
                             </select>
-                            <div class="cell-meta">Record #{{ item.id }}{% if item.worker.site %} · {{ item.worker.site.name }}{% endif %}</div>
+                            <div class="cell-meta">Record #{{ item.id }}{% if item.worker.site %} | {{ item.worker.site.name }}{% endif %}</div>
                         </div>
                     </td>
                     <td data-label="Date">

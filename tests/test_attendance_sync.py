@@ -3,7 +3,7 @@ from datetime import date, datetime
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from bot.messages import build_attendance_sync_text
+from bot.messages import build_attendance_sync_text, build_public_holiday_sync_text, build_today_status_text
 from web.attendance_routes import _attendance_sync_payload, _notify_worker_about_attendance_change
 
 
@@ -48,6 +48,34 @@ def test_attendance_sync_payload_ignores_non_telegram_records() -> None:
     )
 
     assert _attendance_sync_payload(record) is None
+
+
+def test_build_public_holiday_sync_text_includes_scope_and_action() -> None:
+    text = build_public_holiday_sync_text(
+        holiday_date=date(2026, 5, 1),
+        holiday_name="Labour Day",
+        site_name="Sepang",
+        notes=None,
+        action="created",
+    )
+
+    assert "Labour Day" in text
+    assert "Sepang" in text
+    assert "direkodkan" in text
+
+
+def test_build_today_status_text_surfaces_public_holiday() -> None:
+    text = build_today_status_text(
+        worker_name="Worker One",
+        site_name="Sepang",
+        check_in_at=None,
+        check_out_at=None,
+        approved_leave_label=None,
+        public_holiday_label="Labour Day",
+    )
+
+    assert "Cuti Umum (Labour Day)" in text
+    assert "Cuti Umum: Labour Day" in text
 
 
 def test_notify_worker_about_attendance_change_only_for_telegram_originated_records(monkeypatch) -> None:

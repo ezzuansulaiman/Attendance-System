@@ -50,6 +50,7 @@ from services.attendance_service import (
     self_register_worker,
 )
 from services.leave_service import leave_label, leave_status_label, list_leave_requests_for_worker
+from services.public_holiday_service import get_public_holiday_for_date, public_holiday_label
 
 REGISTRATION_BACK_CALLBACK = "registration:back"
 REGISTRATION_CANCEL_CALLBACK = "registration:cancel"
@@ -212,6 +213,11 @@ async def show_worker_status(callback: CallbackQuery) -> None:
         today = datetime.now(local_tz).date()
         attendance = await get_attendance_for_date(session, worker_id=worker.id, attendance_date=today)
         approved_leave = await get_approved_leave_for_day(session, worker_id=worker.id, target_date=today)
+        public_holiday = await get_public_holiday_for_date(
+            session,
+            target_date=today,
+            site_id=worker.site_id,
+        )
 
     await callback.message.answer(
         build_today_status_text(
@@ -220,6 +226,7 @@ async def show_worker_status(callback: CallbackQuery) -> None:
             check_in_at=attendance.check_in_at if attendance else None,
             check_out_at=attendance.check_out_at if attendance else None,
             approved_leave_label=leave_label(approved_leave.leave_type) if approved_leave else None,
+            public_holiday_label=public_holiday_label(public_holiday),
         ),
         reply_markup=worker_menu_keyboard(),
     )

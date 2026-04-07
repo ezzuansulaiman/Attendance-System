@@ -5,10 +5,12 @@ from bot.reminders import (
     ReminderSlot,
     due_reminder_targets,
     extract_reminder_chat_ids,
+    public_holiday_worker_ids_for_date,
     pending_worker_names,
     reminder_token,
     select_workers_for_chat,
 )
+from models.models import PublicHoliday
 from models.models import AttendanceRecord, Site, Worker
 
 
@@ -120,13 +122,38 @@ def test_pending_worker_names_skip_approved_leave_and_completed_checkout() -> No
         workers=workers,
         attendance_lookup=attendance_lookup,
         approved_leave_worker_ids={1},
+        public_holiday_worker_ids=set(),
     )
     checkout_pending = pending_worker_names(
         reminder_type="checkout",
         workers=workers,
         attendance_lookup=attendance_lookup,
         approved_leave_worker_ids=set(),
+        public_holiday_worker_ids=set(),
     )
 
     assert checkin_pending == []
     assert checkout_pending == ["Bala"]
+
+
+def test_public_holiday_worker_ids_for_date_resolves_site_and_global_holidays() -> None:
+    alpha = Site(id=1, name="Alpha", code="ALPHA", telegram_group_id=-10010, is_active=True)
+    beta = Site(id=2, name="Beta", code="BETA", telegram_group_id=None, is_active=True)
+    workers = [
+        Worker(id=1, telegram_user_id=101, full_name="Ali", site=alpha, site_id=1, is_active=True),
+        Worker(id=2, telegram_user_id=102, full_name="Bala", site=beta, site_id=2, is_active=True),
+    ]
+
+    site_scoped = public_holiday_worker_ids_for_date(
+        workers=workers,
+        public_holidays=[PublicHoliday(id=1, name="Local Holiday", holiday_date=date(2026, 4, 7), site_id=1)],
+        target_date=date(2026, 4, 7),
+    )
+    global_scoped = public_holiday_worker_ids_for_date(
+        workers=workers,
+        public_holidays=[PublicHoliday(id=2, name="Global Holiday", holiday_date=date(2026, 4, 7), site_id=None)],
+        target_date=date(2026, 4, 7),
+    )
+
+    assert site_scoped == {1}
+    assert global_scoped == {1, 2}

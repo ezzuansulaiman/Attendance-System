@@ -6,11 +6,14 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
+from bot.messages import build_public_holiday_sync_text
+from bot.reminders import extract_reminder_chat_ids
 from bot.keyboards import leave_review_keyboard
 from bot.messages import build_attendance_sync_text, build_leave_review_text, build_leave_summary_text
 from config import get_settings
 from models import session_scope
 from services.leave_service import get_leave_request
+from services.site_service import get_site_by_id, list_sites
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +140,83 @@ async def send_attendance_sync_to_worker_via_configured_bot(
             attendance_date=attendance_date,
             check_in_at=check_in_at,
             check_out_at=check_out_at,
+            notes=notes,
+            action=action,
+        )
+        return True
+    finally:
+        await bot.session.close()
+
+
+async def send_public_holiday_sync(
+    bot: Bot,
+    *,
+    holiday_name: str,
+    holiday_date,
+    site_id,
+    site_name,
+    notes,
+    action: str,
+) -> None:
+    settings = get_settings()
+    async with session_scope() as session:
+        chat_ids: tuple[int, ...]
+        resolved_site_name = site_name
+        if site_id is not None:
+            site = await get_site_by_id(session, site_id)
+            resolved_site_name = site.name if site else site_name
+            if site and site.telegram_group_id is not None:
+                chat_ids = (site.telegram_group_id,)
+            elif settings.group_id is not None:
+                chat_ids = (settings.group_id,)
+            else:
+                chat_ids = ()
+        else:
+            sites = await list_sites(session, active_only=True)
+            chat_ids = extract_reminder_chat_ids(sites, settings.group_id)
+            resolved_site_name = resolved_site_name or "Semua site"
+
+    if not chat_ids:
+        return
+
+    text = build_public_holiday_sync_text(
+        holiday_date=holiday_date,
+        holiday_name=holiday_name,
+        site_name=resolved_site_name,
+        notes=notes,
+        action=action,
+    )
+    for chat_id in chat_ids:
+        try:
+            await bot.send_message(chat_id=chat_id, text=text)
+        except Exception:
+            logger.exception("Failed to send public holiday sync to chat %s.", chat_id)
+
+
+async def send_public_holiday_sync_via_configured_bot(
+    *,
+    holiday_name: str,
+    holiday_date,
+    site_id,
+    site_name,
+    notes,
+    action: str,
+) -> bool:
+    settings = get_settings()
+    if not settings.bot_enabled:
+        return False
+
+    bot = Bot(
+        token=settings.bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        await send_public_holiday_sync(
+            bot,
+            holiday_name=holiday_name,
+            holiday_date=holiday_date,
+            site_id=site_id,
+            site_name=site_name,
             notes=notes,
             action=action,
         )

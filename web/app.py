@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 
+from models.database import init_database
 from web.attendance_routes import router as attendance_router
 from web.auth_routes import router as auth_router
 from web.dashboard_routes import router as dashboard_router
@@ -13,8 +17,22 @@ from web.site_routes import router as site_router
 from web.worker_routes import router as worker_router
 
 
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    await init_database()
+    yield
+
+
+def _initialize_database_for_app() -> None:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(init_database())
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Telegram Attendance Dashboard")
+    _initialize_database_for_app()
+    app = FastAPI(title="Telegram Attendance Dashboard", lifespan=_lifespan)
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.session_secret,

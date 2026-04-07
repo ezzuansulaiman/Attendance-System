@@ -191,6 +191,68 @@ async def get_leave_request(session: AsyncSession, leave_id: int) -> Optional[Le
     return result.scalar_one_or_none()
 
 
+async def admin_upsert_single_day_leave(
+    session: AsyncSession,
+    *,
+    worker_id: int,
+    leave_type: str,
+    target_date: date,
+    reason: Optional[str] = None,
+) -> LeaveRequest:
+    if not is_supported_leave_type(leave_type):
+        raise LeaveError("Selected leave type is not supported.")
+
+    worker = await session.get(Worker, worker_id)
+    if not worker:
+        raise LeaveError("Worker not found.")
+
+    result = await session.execute(
+        select(LeaveRequest).where(
+            LeaveRequest.worker_id == worker_id,
+            LeaveRequest.status.in_(ACTIVE_REVIEWABLE_STATUSES),
+            LeaveRequest.start_date <= target_date,
+            LeaveRequest.end_date >= target_date,
+        )
+    )
+    existing_request = result.scalar_one_or_none()
+    if existing_request and (existing_request.start_date != target_date or existing_request.end_date != target_date):
+        raise LeaveError("This date is part of a multi-day leave request. Edit it from the Leave Requests page.")
+
+    effective_reason = (reason or "").strip() or f"{leave_label(leave_type)} recorded from attendance grid."
+
+    if existing_request:
+        existing_request.leave_type = leave_type
+        existing_request.reason = effective_reason
+        existing_request.status = "approved"
+        existing_request.reviewed_at = datetime.now(timezone.utc)
+        existing_request.reviewed_by_telegram_id = 0
+        existing_request.review_notes = "Updated from attendance grid."
+        await session.commit()
+        await session.refresh(existing_request)
+        return existing_request
+
+    leave_request = LeaveRequest(
+        worker_id=worker_id,
+        leave_type=leave_type,
+        start_date=target_date,
+        end_date=target_date,
+        reason=effective_reason,
+        status="approved",
+        reviewed_at=datetime.now(timezone.utc),
+        reviewed_by_telegram_id=0,
+        review_notes="Created from attendance grid.",
+    )
+    session.add(leave_request)
+    await session.commit()
+    await session.refresh(leave_request)
+    return leave_request
+
+
+async def delete_leave_request(session: AsyncSession, leave_request: LeaveRequest) -> None:
+    await session.delete(leave_request)
+    await session.commit()
+
+
 async def approve_leave_request(
     session: AsyncSession,
     *,

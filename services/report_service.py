@@ -13,6 +13,7 @@ from datetime_utils import format_local_datetime, now_local
 from models.models import AttendanceRecord, Site, Worker
 from services.excel_generator import build_monthly_attendance_excel as render_monthly_attendance_excel
 from services.pdf_generator import build_monthly_attendance_pdf as render_monthly_attendance_pdf
+from services.public_holiday_service import list_public_holidays_in_range
 from services.site_service import get_default_site
 
 
@@ -42,8 +43,19 @@ def _build_attendance_lookup(
     }
 
 
-def _attendance_symbol(record: Optional[AttendanceRecord]) -> str:
-    return "P" if record and record.check_in_at else ""
+def _build_public_holiday_lookup(public_holidays: list[object]) -> dict[date, object]:
+    lookup: dict[date, object] = {}
+    for public_holiday in sorted(public_holidays, key=lambda item: (item.site_id is not None, item.id)):
+        lookup[public_holiday.holiday_date] = public_holiday
+    return lookup
+
+
+def _attendance_symbol(record: Optional[AttendanceRecord], *, public_holiday: Optional[object]) -> str:
+    if record and record.check_in_at:
+        return "P"
+    if public_holiday:
+        return "PH"
+    return ""
 
 
 def _attendance_status(record: AttendanceRecord) -> str:
@@ -65,6 +77,7 @@ def _build_worker_report_row(
     month: int,
     days_in_month: int,
     attendance_lookup: dict[tuple[int, date], AttendanceRecord],
+    public_holiday_lookup: dict[date, object],
 ) -> dict[str, Any]:
     day_values: list[str] = []
     present_days = 0
@@ -77,9 +90,11 @@ def _build_worker_report_row(
 
         current_date = date(year, month, day)
         record = attendance_lookup.get((worker.id, current_date))
-        symbol = _attendance_symbol(record)
+        public_holiday = public_holiday_lookup.get(current_date)
+        symbol = _attendance_symbol(record, public_holiday=public_holiday)
         if symbol:
-            present_days += 1
+            if symbol == "P":
+                present_days += 1
             if record and record.check_out_at:
                 completed_days += 1
         day_values.append(symbol)
@@ -187,8 +202,12 @@ async def build_monthly_attendance_report(
         attendance_query = attendance_query.where(Worker.site_id == resolved_site_id)
     attendance_result = await session.execute(attendance_query)
     attendance_records = attendance_result.scalars().all()
+    public_holidays = await list_public_holidays_in_range(session, start_date=start_date, end_date=end_date)
 
     attendance_lookup = _build_attendance_lookup(attendance_records)
+    public_holiday_lookup = _build_public_holiday_lookup(
+        [holiday for holiday in public_holidays if holiday.site_id in {resolved_site_id, None}]
+    )
     report_rows = [
         _build_worker_report_row(
             worker=worker,
@@ -196,6 +215,7 @@ async def build_monthly_attendance_report(
             month=month,
             days_in_month=days_in_month,
             attendance_lookup=attendance_lookup,
+            public_holiday_lookup=public_holiday_lookup,
         )
         for worker in workers
     ]
