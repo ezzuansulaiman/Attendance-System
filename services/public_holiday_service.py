@@ -167,6 +167,7 @@ async def get_public_holiday_for_date(
         result = await session.execute(query)
     except OperationalError as exc:
         if _is_legacy_public_holiday_schema_error(exc):
+            await session.rollback()
             return await _get_legacy_public_holiday_for_date(session, target_date=target_date)
         raise
     return result.scalars().first()
@@ -190,6 +191,7 @@ async def list_public_holidays_in_range(
         )
     except OperationalError as exc:
         if _is_legacy_public_holiday_schema_error(exc):
+            await session.rollback()
             return await _list_legacy_public_holidays_in_range(session, start_date=start_date, end_date=end_date)
         raise
     return result.scalars().all()
