@@ -16,7 +16,12 @@ from bot.context import (
     worker_group_restriction_text,
     worker_chat_is_allowed,
 )
-from bot.keyboards import WORKER_MENU_BUTTON, main_menu_keyboard, worker_menu_keyboard
+from bot.keyboards import (
+    WORKER_MENU_BUTTON,
+    is_worker_menu_alias,
+    main_menu_keyboard,
+    worker_menu_keyboard,
+)
 from bot.admin_handlers import send_admin_menu_message
 from bot.messages import admin_menu_text, registration_intro_text, worker_menu_text
 from bot.states import RegistrationStates
@@ -51,6 +56,7 @@ async def _send_worker_menu_message(message: Message) -> None:
 
 @router.message(CommandStart())
 @router.message(Command("menu"))
+@router.message(F.text.func(is_worker_menu_alias))
 async def show_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
     worker = await load_registered_worker(message.from_user.id)

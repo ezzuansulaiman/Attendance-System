@@ -8,7 +8,7 @@ from services.leave_service import annual_leave_notice_text, leave_label
 def worker_menu_text() -> str:
     return (
         "<b>Menu Kehadiran</b>\n"
-        "Sila gunakan butang menu yang dipaparkan. Anda tidak perlu menaip <code>/menu</code>.\n\n"
+        "Sila gunakan butang menu yang dipaparkan. Anda tidak perlu menaip <code>/menu</code>. Jika butang tidak muncul, taip <code>menu</code> sahaja.\n\n"
         "Pekerja yang berdaftar boleh merekod masuk, merekod keluar, dan memohon cuti.\n"
         f"{annual_leave_notice_text()}\n"
         "Untuk Cuti Sakit dan Cuti Kecemasan, anda akan diminta muat naik gambar sokongan. Hanya <code>file_id</code> Telegram akan disimpan."
@@ -45,7 +45,7 @@ def admin_menu_text(*, web_login_enabled: bool) -> str:
     )
     return (
         "<b>Menu Admin</b>\n"
-        "Sila gunakan butang menu yang dipaparkan. Anda tidak perlu menaip <code>/admin</code>."
+        "Sila gunakan butang menu yang dipaparkan. Anda tidak perlu menaip <code>/admin</code>. Jika butang tidak muncul, taip <code>admin</code> sahaja."
         f"{web_line}"
     )
 

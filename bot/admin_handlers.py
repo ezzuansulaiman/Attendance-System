@@ -8,7 +8,7 @@ from aiogram.filters import Command
 from aiogram.types import BotCommand, BufferedInputFile, CallbackQuery, Message
 
 from bot.context import is_admin, local_tz
-from bot.keyboards import ADMIN_MENU_BUTTON, admin_menu_keyboard, leave_review_keyboard
+from bot.keyboards import ADMIN_MENU_BUTTON, admin_menu_keyboard, is_admin_menu_alias, leave_review_keyboard
 from bot.leave_handlers import notify_worker_review
 from bot.messages import admin_menu_text, build_leave_summary_text
 from config import get_settings
@@ -34,6 +34,7 @@ async def send_admin_menu_message(message: Message) -> None:
 
 
 @router.message(Command("admin"))
+@router.message(F.text.func(is_admin_menu_alias))
 async def admin_menu(message: Message) -> None:
     if not is_admin(message.from_user.id):
         await message.answer("This command is restricted to Telegram admins configured in ADMIN_IDS.")

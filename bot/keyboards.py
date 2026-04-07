@@ -6,6 +6,18 @@ WORKER_MENU_BUTTON = "Menu Kehadiran"
 ADMIN_MENU_BUTTON = "Menu Admin"
 
 
+def normalize_menu_trigger(raw_text: Optional[str]) -> str:
+    return " ".join((raw_text or "").split()).casefold()
+
+
+def is_worker_menu_alias(raw_text: Optional[str]) -> bool:
+    return normalize_menu_trigger(raw_text) == "menu"
+
+
+def is_admin_menu_alias(raw_text: Optional[str]) -> bool:
+    return normalize_menu_trigger(raw_text) == "admin"
+
+
 def main_menu_keyboard(*, show_worker_menu: bool, show_admin_menu: bool) -> Optional[ReplyKeyboardMarkup]:
     keyboard_rows: list[list[KeyboardButton]] = []
     first_row: list[KeyboardButton] = []
