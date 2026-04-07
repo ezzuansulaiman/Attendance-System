@@ -7,6 +7,7 @@ from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer,
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.database import Base
+from models.datetime_types import LocalizedDateTime
 
 
 class Worker(Base):
@@ -46,8 +47,8 @@ class AttendanceRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id", ondelete="CASCADE"), index=True)
     attendance_date: Mapped[date] = mapped_column(Date, index=True)
-    check_in_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    check_out_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    check_in_at: Mapped[Optional[datetime]] = mapped_column(LocalizedDateTime(), nullable=True)
+    check_out_at: Mapped[Optional[datetime]] = mapped_column(LocalizedDateTime(), nullable=True)
     source_chat_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -162,10 +162,10 @@
                         <td data-label="Progress">
                             {% if record.check_in_at and record.check_out_at %}
                             <span class="status-pill success">Checked in and out</span>
-                            <div class="cell-meta">{{ record.check_in_at.strftime('%Y-%m-%d %H:%M') }} to {{ record.check_out_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                            <div class="cell-meta">{{ record.check_in_at|format_local_datetime('%Y-%m-%d %H:%M') }} to {{ record.check_out_at|format_local_datetime('%Y-%m-%d %H:%M') }}</div>
                             {% elif record.check_in_at %}
                             <span class="status-pill warning">Checked in only</span>
-                            <div class="cell-meta">{{ record.check_in_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                            <div class="cell-meta">{{ record.check_in_at|format_local_datetime('%Y-%m-%d %H:%M') }}</div>
                             {% else %}
                             <span class="status-pill neutral">No time logged</span>
                             {% endif %}

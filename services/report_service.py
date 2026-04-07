@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from config import get_settings
+from datetime_utils import format_local_datetime, now_local
 from models.models import AttendanceRecord, Site, Worker
 from services.excel_generator import build_monthly_attendance_excel as render_monthly_attendance_excel
 from services.pdf_generator import build_monthly_attendance_pdf as render_monthly_attendance_pdf
@@ -16,7 +17,7 @@ from services.site_service import get_default_site
 
 
 def build_report_download_filename(*, year: int, month: int, extension: str) -> str:
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    timestamp = now_local().strftime("%Y%m%d-%H%M%S")
     normalized_extension = extension.lstrip(".")
     return f"attendance-{year}-{month:02d}-{timestamp}.{normalized_extension}"
 
@@ -54,7 +55,7 @@ def _attendance_status(record: AttendanceRecord) -> str:
 
 
 def _format_timestamp(value: Optional[datetime]) -> str:
-    return value.strftime("%Y-%m-%d %H:%M") if value else "-"
+    return format_local_datetime(value, "%Y-%m-%d %H:%M") if value else "-"
 
 
 def _build_worker_report_row(
@@ -210,7 +211,7 @@ async def build_monthly_attendance_report(
         "month": month,
         "days_in_month": days_in_month,
         "period_label": f"{calendar.month_name[month]} {year}",
-        "generated_at": datetime.now().strftime("%d %b %Y %H:%M"),
+        "generated_at": now_local().strftime("%d %b %Y %H:%M"),
         "rows": report_rows,
         "detail_rows": detail_rows,
         "summary": {

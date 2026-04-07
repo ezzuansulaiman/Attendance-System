@@ -4,6 +4,7 @@ import html
 from datetime import date, datetime
 from typing import Optional
 
+from datetime_utils import format_local_datetime
 from services.leave_service import annual_leave_notice_text, leave_label
 
 
@@ -12,7 +13,7 @@ def format_display_date(value: date) -> str:
 
 
 def format_display_datetime(value: datetime) -> str:
-    return value.strftime("%d/%m/%Y %H:%M")
+    return format_local_datetime(value, "%d/%m/%Y %H:%M")
 
 
 def mask_sensitive_value(value: Optional[str], *, visible_suffix: int = 4) -> str:

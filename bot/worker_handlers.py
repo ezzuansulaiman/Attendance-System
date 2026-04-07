@@ -37,6 +37,7 @@ from bot.messages import (
     registration_intro_text,
     worker_menu_text,
 )
+from datetime_utils import format_local_datetime
 from bot.states import RegistrationStates
 from models import session_scope
 from services.attendance_service import (
@@ -179,7 +180,7 @@ async def handle_attendance_action(callback: CallbackQuery) -> None:
                     occurred_at=now,
                 )
                 await callback.message.answer(
-                    f"{worker.full_name} berjaya direkod masuk pada {record.check_in_at.astimezone(local_tz):%H:%M:%S}."
+                    f"{worker.full_name} berjaya direkod masuk pada {format_local_datetime(record.check_in_at, '%H:%M:%S')}."
                 )
                 return
 
@@ -190,7 +191,7 @@ async def handle_attendance_action(callback: CallbackQuery) -> None:
                 occurred_at=now,
             )
             await callback.message.answer(
-                f"{worker.full_name} berjaya direkod keluar pada {record.check_out_at.astimezone(local_tz):%H:%M:%S}."
+                f"{worker.full_name} berjaya direkod keluar pada {format_local_datetime(record.check_out_at, '%H:%M:%S')}."
             )
         except AttendanceError as exc:
             await callback.message.answer(str(exc))

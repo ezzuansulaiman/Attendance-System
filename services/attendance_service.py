@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from datetime_utils import coerce_optional_local_datetime
 from models.models import AttendanceRecord, LeaveRequest, Site, Worker
 from services.site_service import get_default_site
 
@@ -213,6 +214,9 @@ async def check_in(
     chat_id: int,
     occurred_at: datetime,
 ) -> AttendanceRecord:
+    occurred_at = coerce_optional_local_datetime(occurred_at)
+    if occurred_at is None:
+        raise AttendanceError("Check-in time is required.")
     attendance_date = occurred_at.date()
     leave = await _approved_leave_for_day(session, worker.id, attendance_date)
     if leave:
@@ -248,6 +252,9 @@ async def check_out(
     chat_id: int,
     occurred_at: datetime,
 ) -> AttendanceRecord:
+    occurred_at = coerce_optional_local_datetime(occurred_at)
+    if occurred_at is None:
+        raise AttendanceError("Check-out time is required.")
     attendance_date = occurred_at.date()
     record = await get_attendance_for_date(
         session,
@@ -303,6 +310,8 @@ async def create_or_update_attendance_record(
     check_out_at: Optional[datetime],
     notes: Optional[str],
 ) -> AttendanceRecord:
+    check_in_at = coerce_optional_local_datetime(check_in_at)
+    check_out_at = coerce_optional_local_datetime(check_out_at)
     worker = await get_worker_by_id(session, worker_id)
     if not worker:
         raise AttendanceError("Worker not found.")
@@ -340,6 +349,8 @@ async def update_attendance_record(
     check_out_at: Optional[datetime],
     notes: Optional[str],
 ) -> AttendanceRecord:
+    check_in_at = coerce_optional_local_datetime(check_in_at)
+    check_out_at = coerce_optional_local_datetime(check_out_at)
     worker = await get_worker_by_id(session, worker_id)
     if not worker:
         raise AttendanceError("Worker not found.")

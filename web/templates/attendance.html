@@ -64,12 +64,12 @@
                     <div class="field field-card">
                         <label for="attendance-check-in">Check-In</label>
                         <div class="label-hint">Leave blank if arrival has not been captured yet.</div>
-                        <input id="attendance-check-in" type="datetime-local" name="check_in_at" value="{{ form_data.get('check_in_at', record.check_in_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_in_at else '') }}">
+                        <input id="attendance-check-in" type="datetime-local" name="check_in_at" value="{{ form_data.get('check_in_at', record.check_in_at|datetime_local_value if record and record.check_in_at else '') }}">
                     </div>
                     <div class="field field-card">
                         <label for="attendance-check-out">Check-Out</label>
                         <div class="label-hint">Add the end-of-day time when the shift is complete.</div>
-                        <input id="attendance-check-out" type="datetime-local" name="check_out_at" value="{{ form_data.get('check_out_at', record.check_out_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_out_at else '') }}">
+                        <input id="attendance-check-out" type="datetime-local" name="check_out_at" value="{{ form_data.get('check_out_at', record.check_out_at|datetime_local_value if record and record.check_out_at else '') }}">
                     </div>
                 </div>
                 <div class="field" style="margin-top: 14px;">
@@ -221,14 +221,14 @@
                     </td>
                     <td data-label="Check-In">
                         <div class="table-cell-stack">
-                            <input class="table-input" type="datetime-local" name="check_in_at" value="{{ item.check_in_at.strftime('%Y-%m-%dT%H:%M') if item.check_in_at else '' }}" form="attendance-row-{{ item.id }}">
-                            <div class="table-helper">{{ item.check_in_at.strftime('%d/%m/%Y %H:%M') if item.check_in_at else 'Not recorded yet' }}</div>
+                            <input class="table-input" type="datetime-local" name="check_in_at" value="{{ item.check_in_at|datetime_local_value if item.check_in_at else '' }}" form="attendance-row-{{ item.id }}">
+                            <div class="table-helper">{{ item.check_in_at|format_local_datetime('%d/%m/%Y %H:%M') if item.check_in_at else 'Not recorded yet' }}</div>
                         </div>
                     </td>
                     <td data-label="Check-Out">
                         <div class="table-cell-stack">
-                            <input class="table-input" type="datetime-local" name="check_out_at" value="{{ item.check_out_at.strftime('%Y-%m-%dT%H:%M') if item.check_out_at else '' }}" form="attendance-row-{{ item.id }}">
-                            <div class="table-helper">{{ item.check_out_at.strftime('%d/%m/%Y %H:%M') if item.check_out_at else 'Pending checkout' }}</div>
+                            <input class="table-input" type="datetime-local" name="check_out_at" value="{{ item.check_out_at|datetime_local_value if item.check_out_at else '' }}" form="attendance-row-{{ item.id }}">
+                            <div class="table-helper">{{ item.check_out_at|format_local_datetime('%d/%m/%Y %H:%M') if item.check_out_at else 'Pending checkout' }}</div>
                         </div>
                     </td>
                     <td data-label="Notes">

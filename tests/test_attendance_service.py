@@ -2,6 +2,7 @@ import asyncio
 from datetime import date, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -9,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from models.database import Base
 from models.models import AttendanceRecord, Site, Worker
 from services.attendance_service import AttendanceError, update_attendance_record
+
+
+LOCAL_TZ = ZoneInfo("Asia/Kuala_Lumpur")
 
 
 def test_update_attendance_record_rejects_duplicate_target_without_deleting_original() -> None:
@@ -23,6 +27,11 @@ def test_update_attendance_record_preserves_source_chat_id_for_telegram_originat
         asyncio.run(
             _test_update_attendance_record_preserves_source_chat_id_for_telegram_originated_record(Path(temp_dir))
         )
+
+
+def test_attendance_record_round_trip_keeps_malaysia_timezone_in_sqlite() -> None:
+    with TemporaryDirectory(dir=Path.cwd()) as temp_dir:
+        asyncio.run(_test_attendance_record_round_trip_keeps_malaysia_timezone_in_sqlite(Path(temp_dir)))
 
 
 async def _test_update_attendance_record_rejects_duplicate_target_without_deleting_original(tmp_path) -> None:
@@ -51,12 +60,12 @@ async def _test_update_attendance_record_rejects_duplicate_target_without_deleti
             original_record = AttendanceRecord(
                 worker_id=worker.id,
                 attendance_date=date(2026, 4, 1),
-                check_in_at=datetime(2026, 4, 1, 8, 0),
+                check_in_at=datetime(2026, 4, 1, 8, 0, tzinfo=LOCAL_TZ),
             )
             conflicting_record = AttendanceRecord(
                 worker_id=worker.id,
                 attendance_date=date(2026, 4, 2),
-                check_in_at=datetime(2026, 4, 2, 8, 0),
+                check_in_at=datetime(2026, 4, 2, 8, 0, tzinfo=LOCAL_TZ),
             )
             session.add_all([original_record, conflicting_record])
             await session.commit()
@@ -67,14 +76,14 @@ async def _test_update_attendance_record_rejects_duplicate_target_without_deleti
                     original_record,
                     worker_id=worker.id,
                     attendance_date=date(2026, 4, 2),
-                    check_in_at=datetime(2026, 4, 2, 9, 0),
+                    check_in_at=datetime(2026, 4, 2, 9, 0, tzinfo=LOCAL_TZ),
                     check_out_at=None,
                     notes="Updated",
                 )
 
             await session.refresh(original_record)
             assert original_record.attendance_date == date(2026, 4, 1)
-            assert original_record.check_in_at == datetime(2026, 4, 1, 8, 0)
+            assert original_record.check_in_at == datetime(2026, 4, 1, 8, 0, tzinfo=LOCAL_TZ)
     finally:
         await engine.dispose()
 
@@ -105,7 +114,7 @@ async def _test_update_attendance_record_preserves_source_chat_id_for_telegram_o
             record = AttendanceRecord(
                 worker_id=worker.id,
                 attendance_date=date(2026, 4, 7),
-                check_in_at=datetime(2026, 4, 7, 8, 0),
+                check_in_at=datetime(2026, 4, 7, 8, 0, tzinfo=LOCAL_TZ),
                 source_chat_id=-1001234567890,
                 notes="Original Telegram check-in",
             )
@@ -117,13 +126,52 @@ async def _test_update_attendance_record_preserves_source_chat_id_for_telegram_o
                 record,
                 worker_id=worker.id,
                 attendance_date=date(2026, 4, 7),
-                check_in_at=datetime(2026, 4, 7, 8, 15),
-                check_out_at=datetime(2026, 4, 7, 17, 30),
+                check_in_at=datetime(2026, 4, 7, 8, 15, tzinfo=LOCAL_TZ),
+                check_out_at=datetime(2026, 4, 7, 17, 30, tzinfo=LOCAL_TZ),
                 notes="Adjusted from admin web",
             )
 
             await session.refresh(record)
             assert record.source_chat_id == -1001234567890
             assert record.notes == "Adjusted from admin web"
+    finally:
+        await engine.dispose()
+
+
+async def _test_attendance_record_round_trip_keeps_malaysia_timezone_in_sqlite(tmp_path) -> None:
+    database_path = tmp_path / "attendance-timezone.db"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{database_path.as_posix()}")
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        async with session_factory() as session:
+            site = Site(name="Timezone Site", code="TZ", is_active=True)
+            session.add(site)
+            await session.flush()
+
+            worker = Worker(
+                telegram_user_id=111222,
+                full_name="Timezone Worker",
+                site_id=site.id,
+                is_active=True,
+            )
+            session.add(worker)
+            await session.flush()
+
+            expected = datetime(2026, 4, 7, 8, 30, tzinfo=LOCAL_TZ)
+            record = AttendanceRecord(
+                worker_id=worker.id,
+                attendance_date=expected.date(),
+                check_in_at=expected,
+            )
+            session.add(record)
+            await session.commit()
+            await session.refresh(record)
+
+            assert record.check_in_at == expected
+            assert record.check_in_at.tzinfo == LOCAL_TZ
     finally:
         await engine.dispose()
