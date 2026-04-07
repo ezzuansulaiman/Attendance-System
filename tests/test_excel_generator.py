@@ -56,7 +56,13 @@ def test_build_monthly_attendance_excel_returns_valid_workbook() -> None:
         workbook_xml = workbook.read("xl/workbook.xml").decode("utf-8")
         summary_sheet = workbook.read("xl/worksheets/sheet1.xml").decode("utf-8")
         matrix_sheet = workbook.read("xl/worksheets/sheet2.xml").decode("utf-8")
+        detail_sheet = workbook.read("xl/worksheets/sheet3.xml").decode("utf-8")
 
     assert 'name="Summary"' in workbook_xml
-    assert "MONTHLY ATTENDANCE SUBMISSION REPORT" in summary_sheet
-    assert "Attendance Matrix" in matrix_sheet
+    assert 'name="Monthly Register"' in workbook_xml
+    assert 'name="Attendance Detail"' in workbook_xml
+    assert "MONTHLY ATTENDANCE REPORT" in summary_sheet
+    assert "Submission Notes" not in summary_sheet
+    assert "Prepared for client submission and internal verification." not in summary_sheet
+    assert "Monthly Attendance Register" in matrix_sheet
+    assert "Detailed Attendance Log" not in detail_sheet

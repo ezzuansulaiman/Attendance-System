@@ -12,6 +12,7 @@ from config import get_settings
 from models.models import AttendanceRecord, Site, Worker
 from services.excel_generator import build_monthly_attendance_excel as render_monthly_attendance_excel
 from services.pdf_generator import build_monthly_attendance_pdf as render_monthly_attendance_pdf
+from services.site_service import get_default_site
 
 
 def build_report_download_filename(*, year: int, month: int, extension: str) -> str:
@@ -22,6 +23,14 @@ def build_report_download_filename(*, year: int, month: int, extension: str) -> 
 
 def _site_name(worker: Worker) -> str:
     return worker.site.name if worker.site else "Unassigned"
+
+
+def _display_site_name(site_name: str, *, default_site_name: str) -> str:
+    cleaned_site_name = (site_name or "").strip()
+    cleaned_default = (default_site_name or "").strip()
+    if cleaned_site_name and cleaned_default and cleaned_site_name.casefold() == cleaned_default.casefold():
+        return f"{cleaned_default} Region"
+    return cleaned_site_name or f"{cleaned_default} Region"
 
 
 def _build_attendance_lookup(
@@ -111,12 +120,28 @@ def _build_detail_rows(attendance_records: list[AttendanceRecord]) -> list[dict[
     return detail_rows
 
 
-async def _resolve_site_name(session: AsyncSession, site_id: Optional[int]) -> str:
-    if not site_id:
-        return "All Sites"
-    site_result = await session.execute(select(Site).where(Site.id == site_id))
-    site = site_result.scalar_one_or_none()
-    return site.name if site else "Selected Site"
+async def _resolve_report_scope(
+    session: AsyncSession,
+    *,
+    site_id: Optional[int],
+    default_site_name: str,
+) -> tuple[Optional[int], str]:
+    if site_id:
+        site_result = await session.execute(select(Site).where(Site.id == site_id))
+        site = site_result.scalar_one_or_none()
+        if site:
+            return site.id, _display_site_name(site.name, default_site_name=default_site_name)
+
+    default_site_result = await session.execute(select(Site).where(Site.name == default_site_name).limit(1))
+    default_site = default_site_result.scalar_one_or_none()
+    if default_site:
+        return default_site.id, _display_site_name(default_site.name, default_site_name=default_site_name)
+
+    fallback_site = await get_default_site(session)
+    if fallback_site:
+        return fallback_site.id, _display_site_name(fallback_site.name, default_site_name=default_site_name)
+
+    return None, _display_site_name(default_site_name, default_site_name=default_site_name)
 
 
 async def build_monthly_attendance_report(
@@ -130,6 +155,11 @@ async def build_monthly_attendance_report(
     _, days_in_month = calendar.monthrange(year, month)
     start_date = date(year, month, 1)
     end_date = date(year, month, days_in_month)
+    resolved_site_id, report_site_name = await _resolve_report_scope(
+        session,
+        site_id=site_id,
+        default_site_name=settings.default_site_name,
+    )
 
     workers_query = (
         select(Worker)
@@ -137,8 +167,8 @@ async def build_monthly_attendance_report(
         .where(Worker.is_active.is_(True))
         .order_by(Worker.full_name)
     )
-    if site_id:
-        workers_query = workers_query.where(Worker.site_id == site_id)
+    if resolved_site_id:
+        workers_query = workers_query.where(Worker.site_id == resolved_site_id)
     workers_result = await session.execute(workers_query)
     workers = workers_result.scalars().all()
 
@@ -152,8 +182,8 @@ async def build_monthly_attendance_report(
         )
         .order_by(AttendanceRecord.attendance_date, Worker.full_name)
     )
-    if site_id:
-        attendance_query = attendance_query.where(Worker.site_id == site_id)
+    if resolved_site_id:
+        attendance_query = attendance_query.where(Worker.site_id == resolved_site_id)
     attendance_result = await session.execute(attendance_query)
     attendance_records = attendance_result.scalars().all()
 
@@ -175,7 +205,7 @@ async def build_monthly_attendance_report(
 
     return {
         "company_name": settings.company_name,
-        "site_name": await _resolve_site_name(session, site_id),
+        "site_name": report_site_name,
         "year": year,
         "month": month,
         "days_in_month": days_in_month,

@@ -702,6 +702,46 @@
             font-size: 0.88rem;
         }
 
+        .table-input,
+        .table-select,
+        .table-textarea {
+            width: 100%;
+            padding: 9px 11px;
+            border-radius: 12px;
+            border: 1px solid rgba(44, 66, 51, 0.12);
+            background: rgba(255, 255, 255, 0.92);
+            color: var(--ink);
+            font-size: 0.86rem;
+            box-shadow: none;
+            transform: none;
+        }
+
+        .table-input:focus,
+        .table-select:focus,
+        .table-textarea:focus {
+            transform: none;
+        }
+
+        .table-textarea {
+            min-height: 82px;
+        }
+
+        .table-cell-stack {
+            display: grid;
+            gap: 8px;
+            min-width: 120px;
+        }
+
+        .table-cell-stack .cell-meta {
+            margin-top: 0;
+        }
+
+        .table-helper {
+            color: var(--ink-muted);
+            font-size: 0.78rem;
+            line-height: 1.45;
+        }
+
         .empty-state {
             padding: 26px;
             text-align: center;

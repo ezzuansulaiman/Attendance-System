@@ -4,7 +4,7 @@ from services.pdf_generator import PDF_COPY, build_monthly_attendance_pdf
 def test_pdf_copy_uses_minimal_corporate_labels() -> None:
     assert PDF_COPY["title"] == "Monthly Attendance Report"
     assert PDF_COPY["footer_label"] == "Attendance Report"
-    assert PDF_COPY["metadata_labels"] == ("Company", "Site", "Period", "Generated On")
+    assert PDF_COPY["metadata_labels"] == ("Company", "Name", "Period", "Generated On")
     assert PDF_COPY["summary_labels"] == (
         "Workers",
         "Present Days",

@@ -205,27 +205,20 @@ def _workbook_relationships_xml(sheet_count: int) -> str:
 def _build_summary_sheet(report: dict[str, Any]) -> str:
     rows: list[str] = []
     row_index = 1
-    last_column = 6
+    last_column = 5
 
     rows.append(
         _build_row(
             row_index,
-            [_text_cell(row_index, 1, "MONTHLY ATTENDANCE SUBMISSION REPORT", 1)],
+            [_text_cell(row_index, 1, "MONTHLY ATTENDANCE REPORT", 1)],
             height=24,
-        )
-    )
-    row_index += 1
-    rows.append(
-        _build_row(
-            row_index,
-            [_text_cell(row_index, 1, "Prepared for client submission and internal verification.", 2)],
         )
     )
     row_index += 2
 
     metadata = [
         ("Company", report["company_name"]),
-        ("Site", report["site_name"]),
+        ("Name", report["site_name"]),
         ("Period", report["period_label"]),
         ("Generated", report["generated_at"]),
     ]
@@ -274,24 +267,11 @@ def _build_summary_sheet(report: dict[str, Any]) -> str:
         else:
             metric_cells.append(_text_cell(row_index, index, value, 12))
     rows.append(_build_row(row_index, metric_cells, height=22))
-    row_index += 2
-
-    rows.append(_build_row(row_index, [_text_cell(row_index, 1, "Submission Notes", 3)]))
-    row_index += 1
-    notes = [
-        "Computer generated report. No signature is required.",
-        "Use the Attendance Matrix sheet for the main client-facing monthly schedule.",
-        "Use the Detailed Log sheet if the client requests timestamp-level verification.",
-        "Weekend columns are shaded for quick review. Non-month days are muted out.",
-    ]
-    for note in notes:
-        rows.append(_build_row(row_index, [_text_cell(row_index, 1, f"- {note}", 4)]))
-        row_index += 1
 
     return _worksheet_xml(
         rows=rows,
-        column_widths=[24, 28, 4, 16, 30, 18],
-        merges=["A1:F1", "A2:F2", "A12:F12", "A13:F13", "A14:F14", "A15:F15", "A16:F16"],
+        column_widths=[24, 30, 4, 16, 30],
+        merges=["A1:E1"],
         last_row=row_index - 1,
         last_column=last_column,
     )
@@ -301,11 +281,11 @@ def _build_matrix_sheet(report: dict[str, Any]) -> str:
     rows: list[str] = []
     header_row_index = 4
     first_data_row = 5
-    day_start_column = 5
+    day_start_column = 4
     present_column = day_start_column + 31
     completed_column = present_column + 1
 
-    rows.append(_build_row(1, [_text_cell(1, 1, "Attendance Matrix", 1)], height=24))
+    rows.append(_build_row(1, [_text_cell(1, 1, "Monthly Attendance Register", 1)], height=24))
     rows.append(
         _build_row(
             2,
@@ -324,15 +304,14 @@ def _build_matrix_sheet(report: dict[str, Any]) -> str:
         _text_cell(header_row_index, 1, "No", 5),
         _text_cell(header_row_index, 2, "Employee Name", 5),
         _text_cell(header_row_index, 3, "Code", 5),
-        _text_cell(header_row_index, 4, "Site", 5),
     ]
     for day in range(1, 32):
         header_style = 5 if day <= report["days_in_month"] else 9
         header_cells.append(_text_cell(header_row_index, day_start_column + day - 1, day, header_style))
     header_cells.extend(
         [
-            _text_cell(header_row_index, present_column, "P Days", 5),
-            _text_cell(header_row_index, completed_column, "Out", 5),
+            _text_cell(header_row_index, present_column, "Present", 5),
+            _text_cell(header_row_index, completed_column, "Complete", 5),
         ]
     )
     rows.append(_build_row(header_row_index, header_cells, height=22))
@@ -343,7 +322,6 @@ def _build_matrix_sheet(report: dict[str, Any]) -> str:
             _number_cell(current_row, 1, index, 7),
             _text_cell(current_row, 2, item["worker_name"], 6),
             _text_cell(current_row, 3, item["employee_code"], 7),
-            _text_cell(current_row, 4, item["site_name"], 6),
         ]
         for day in range(1, 32):
             cell_style = 7
@@ -375,10 +353,10 @@ def _build_matrix_sheet(report: dict[str, Any]) -> str:
 
     return _worksheet_xml(
         rows=rows,
-        column_widths=[7, 26, 12, 18] + [4.2] * 31 + [10, 8],
-        merges=["A1:AK1", "A2:AK2"],
-        freeze_pane=(4, 4, "E5"),
-        auto_filter=f"A{header_row_index}:AK{max(current_row - 1, first_data_row)}",
+        column_widths=[7, 32, 14] + [4.6] * 31 + [11, 11],
+        merges=["A1:AJ1", "A2:AJ2"],
+        freeze_pane=(3, 4, "D5"),
+        auto_filter=f"A{header_row_index}:AJ{max(current_row - 1, first_data_row)}",
         last_row=max(current_row - 1, first_data_row),
         last_column=completed_column,
     )
@@ -389,7 +367,7 @@ def _build_detail_sheet(report: dict[str, Any]) -> str:
     header_row_index = 4
     first_data_row = 5
 
-    rows.append(_build_row(1, [_text_cell(1, 1, "Detailed Attendance Log", 1)], height=24))
+    rows.append(_build_row(1, [_text_cell(1, 1, "Attendance Detail", 1)], height=24))
     rows.append(
         _build_row(
             2,
@@ -404,7 +382,7 @@ def _build_detail_sheet(report: dict[str, Any]) -> str:
         )
     )
 
-    headers = ["No", "Date", "Day", "Employee Name", "Code", "Site", "Status", "Check In", "Check Out", "Notes"]
+    headers = ["No", "Date", "Day", "Employee Name", "Code", "Check In", "Check Out", "Status", "Notes"]
     rows.append(
         _build_row(
             header_row_index,
@@ -424,11 +402,10 @@ def _build_detail_sheet(report: dict[str, Any]) -> str:
                     _text_cell(current_row, 3, item["weekday"], 7),
                     _text_cell(current_row, 4, item["worker_name"], 6),
                     _text_cell(current_row, 5, item["employee_code"], 7),
-                    _text_cell(current_row, 6, item["site_name"], 6),
-                    _text_cell(current_row, 7, item["status"], 7),
-                    _text_cell(current_row, 8, item["check_in"], 7),
-                    _text_cell(current_row, 9, item["check_out"], 7),
-                    _text_cell(current_row, 10, item["notes"], 6),
+                    _text_cell(current_row, 6, item["check_in"], 7),
+                    _text_cell(current_row, 7, item["check_out"], 7),
+                    _text_cell(current_row, 8, item["status"], 7),
+                    _text_cell(current_row, 9, item["notes"], 6),
                 ],
             )
         )
@@ -448,12 +425,12 @@ def _build_detail_sheet(report: dict[str, Any]) -> str:
 
     return _worksheet_xml(
         rows=rows,
-        column_widths=[7, 14, 10, 26, 12, 18, 18, 16, 16, 32],
-        merges=["A1:J1", "A2:J2"],
+        column_widths=[7, 14, 10, 28, 12, 16, 16, 18, 34],
+        merges=["A1:I1", "A2:I2"],
         freeze_pane=(0, 4, "A5"),
-        auto_filter=f"A{header_row_index}:J{max(current_row - 1, first_data_row)}",
+        auto_filter=f"A{header_row_index}:I{max(current_row - 1, first_data_row)}",
         last_row=max(current_row - 1, first_data_row),
-        last_column=10,
+        last_column=9,
     )
 
 
@@ -469,7 +446,7 @@ def build_monthly_attendance_excel(*, report: dict[str, Any]) -> bytes:
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as workbook:
         workbook.writestr("[Content_Types].xml", _content_types_xml(len(worksheets)))
         workbook.writestr("_rels/.rels", _root_relationships_xml())
-        workbook.writestr("xl/workbook.xml", _workbook_xml(["Summary", "Attendance Matrix", "Detailed Log"]))
+        workbook.writestr("xl/workbook.xml", _workbook_xml(["Summary", "Monthly Register", "Attendance Detail"]))
         workbook.writestr("xl/_rels/workbook.xml.rels", _workbook_relationships_xml(len(worksheets)))
         workbook.writestr("xl/styles.xml", _styles_xml())
         for index, worksheet_xml in enumerate(worksheets, start=1):

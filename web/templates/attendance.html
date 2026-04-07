@@ -171,15 +171,16 @@
     <div class="panel-header">
         <div>
             <h2>Attendance Ledger</h2>
-            <p>Review the current month's records, edit issues, or remove incorrect entries before export.</p>
+            <p>Edit records directly in the table below, then export the updated PDF or Excel from the same filtered view.</p>
         </div>
+        <span class="mini-badge success">Inline editing enabled</span>
     </div>
+    <p class="helper" style="margin-bottom: 14px;">Every saved change here is reflected in the next exported report for this month and site filter.</p>
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
                     <th>Worker</th>
-                    <th>Site</th>
                     <th>Date</th>
                     <th>Check-In</th>
                     <th>Check-Out</th>
@@ -191,32 +192,62 @@
                 {% for item in records %}
                 <tr>
                     <td data-label="Worker">
-                        <div class="cell-title">{{ item.worker.full_name }}</div>
-                        <div class="cell-meta">Record #{{ item.id }}</div>
+                        <div class="table-cell-stack">
+                            <form id="attendance-row-{{ item.id }}" method="post" action="{{ request.url_for('attendance_update', record_id=item.id) }}"></form>
+                            <form id="attendance-delete-{{ item.id }}" method="post" action="{{ request.url_for('attendance_delete', record_id=item.id) }}" onsubmit="return confirm('Delete this attendance record?');"></form>
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" form="attendance-row-{{ item.id }}">
+                            <input type="hidden" name="month" value="{{ selected_month }}" form="attendance-row-{{ item.id }}">
+                            <input type="hidden" name="year" value="{{ selected_year }}" form="attendance-row-{{ item.id }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" form="attendance-delete-{{ item.id }}">
+                            <input type="hidden" name="month" value="{{ selected_month }}" form="attendance-delete-{{ item.id }}">
+                            <input type="hidden" name="year" value="{{ selected_year }}" form="attendance-delete-{{ item.id }}">
+                            {% if selected_site_id %}
+                            <input type="hidden" name="site_id" value="{{ selected_site_id }}" form="attendance-row-{{ item.id }}">
+                            <input type="hidden" name="site_id" value="{{ selected_site_id }}" form="attendance-delete-{{ item.id }}">
+                            {% endif %}
+                            <select class="table-select" name="worker_id" form="attendance-row-{{ item.id }}" aria-label="Worker">
+                                {% for worker_item in workers %}
+                                <option value="{{ worker_item.id }}" {% if worker_item.id == item.worker_id %}selected{% endif %}>{{ worker_item.full_name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="cell-meta">Record #{{ item.id }}{% if item.worker.site %} · {{ item.worker.site.name }}{% endif %}</div>
+                        </div>
                     </td>
-                    <td data-label="Site">{{ item.worker.site.name if item.worker.site else 'Unassigned' }}</td>
-                    <td data-label="Date">{{ item.attendance_date }}</td>
-                    <td data-label="Check-In">{{ item.check_in_at.strftime('%Y-%m-%d %H:%M') if item.check_in_at else '-' }}</td>
-                    <td data-label="Check-Out">{{ item.check_out_at.strftime('%Y-%m-%d %H:%M') if item.check_out_at else '-' }}</td>
-                    <td data-label="Notes">{{ item.notes or 'No notes.' }}</td>
+                    <td data-label="Date">
+                        <div class="table-cell-stack">
+                            <input class="table-input" type="date" name="attendance_date" value="{{ item.attendance_date.isoformat() }}" form="attendance-row-{{ item.id }}">
+                            <div class="table-helper">{{ item.attendance_date.strftime('%A') }}</div>
+                        </div>
+                    </td>
+                    <td data-label="Check-In">
+                        <div class="table-cell-stack">
+                            <input class="table-input" type="datetime-local" name="check_in_at" value="{{ item.check_in_at.strftime('%Y-%m-%dT%H:%M') if item.check_in_at else '' }}" form="attendance-row-{{ item.id }}">
+                            <div class="table-helper">{{ item.check_in_at.strftime('%d/%m/%Y %H:%M') if item.check_in_at else 'Not recorded yet' }}</div>
+                        </div>
+                    </td>
+                    <td data-label="Check-Out">
+                        <div class="table-cell-stack">
+                            <input class="table-input" type="datetime-local" name="check_out_at" value="{{ item.check_out_at.strftime('%Y-%m-%dT%H:%M') if item.check_out_at else '' }}" form="attendance-row-{{ item.id }}">
+                            <div class="table-helper">{{ item.check_out_at.strftime('%d/%m/%Y %H:%M') if item.check_out_at else 'Pending checkout' }}</div>
+                        </div>
+                    </td>
+                    <td data-label="Notes">
+                        <div class="table-cell-stack" style="min-width: 220px;">
+                            <textarea class="table-textarea" name="notes" form="attendance-row-{{ item.id }}" placeholder="Optional note for this row">{{ item.notes or '' }}</textarea>
+                            <div class="table-helper">Useful for manual corrections, late logs, or supervisor remarks.</div>
+                        </div>
+                    </td>
                     <td data-label="Action">
                         <div class="table-actions">
-                            <a class="button secondary" href="{{ request.url_for('attendance_edit', record_id=item.id) }}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Edit</a>
-                            <form method="post" action="{{ request.url_for('attendance_delete', record_id=item.id) }}" onsubmit="return confirm('Delete this attendance record?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-                                <input type="hidden" name="month" value="{{ selected_month }}">
-                                <input type="hidden" name="year" value="{{ selected_year }}">
-                                {% if selected_site_id %}
-                                <input type="hidden" name="site_id" value="{{ selected_site_id }}">
-                                {% endif %}
-                                <button class="danger" type="submit">Delete</button>
-                            </form>
+                            <button type="submit" form="attendance-row-{{ item.id }}">Save</button>
+                            <button class="secondary" type="reset" form="attendance-row-{{ item.id }}">Reset</button>
+                            <button class="danger" type="submit" form="attendance-delete-{{ item.id }}">Delete</button>
                         </div>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" class="empty-state">
+                    <td colspan="6" class="empty-state">
                         <strong>No attendance records found</strong>
                         Try another site or period, or create the first record for this view.
                     </td>

@@ -16,7 +16,7 @@ PAGE_WIDTH, PAGE_HEIGHT = landscape(A4)
 PDF_COPY = {
     "title": "Monthly Attendance Report",
     "footer_label": "Attendance Report",
-    "metadata_labels": ("Company", "Site", "Period", "Generated On"),
+    "metadata_labels": ("Company", "Name", "Period", "Generated On"),
     "summary_labels": (
         "Workers",
         "Present Days",
@@ -160,7 +160,7 @@ def _build_attendance_table(*, report: dict[str, Any]) -> Table:
     month = int(report["month"])
     rows = list(report["rows"])
     table_data: list[list[str]] = [
-        ["No", "Employee Name", "Code", "Site"] + [str(day) for day in range(1, 32)] + ["P", "Out"]
+        ["No", "Employee Name", "Code"] + [str(day) for day in range(1, 32)] + ["Present", "Complete"]
     ]
 
     for index, row in enumerate(rows, start=1):
@@ -169,49 +169,53 @@ def _build_attendance_table(*, report: dict[str, Any]) -> Table:
                 str(index),
                 str(row["worker_name"]),
                 str(row["employee_code"]),
-                str(row["site_name"]),
                 *[str(value) for value in row["days"]],
                 str(row["present_days"]),
                 str(row["completed_days"]),
             ]
         )
 
-    table = Table(table_data, colWidths=[18, 120, 42, 60] + [12.7] * 31 + [24, 24], repeatRows=1)
+    table = Table(table_data, colWidths=[18, 144, 48] + [13.2] * 31 + [30, 34], repeatRows=1)
     style_commands: list[tuple[Any, ...]] = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#334155")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f3b57")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 6.4),
+        ("FONTSIZE", (0, 0), (-1, 0), 6.7),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("BOX", (0, 0), (-1, -1), 0.45, colors.HexColor("#cbd5e1")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.2, colors.HexColor("#dbe4ee")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.22, colors.HexColor("#dde5ee")),
         ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 1), (-1, -1), 6.3),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-        ("TOPPADDING", (0, 0), (-1, 0), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
-        ("TOPPADDING", (0, 1), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 1), (-1, -1), 4),
+        ("FONTSIZE", (0, 1), (-1, -1), 6.4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, 0), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+        ("TOPPADDING", (0, 1), (-1, -1), 4.5),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), 4.5),
         ("ALIGN", (1, 1), (1, -1), "LEFT"),
-        ("ALIGN", (3, 1), (3, -1), "LEFT"),
         ("LEFTPADDING", (1, 1), (1, -1), 5),
-        ("LEFTPADDING", (3, 1), (3, -1), 5),
     ]
 
     for row_index in range(1, len(table_data)):
-        row_background = "#ffffff" if row_index % 2 else "#f8fafc"
+        row_background = "#ffffff" if row_index % 2 else "#f7fafc"
         style_commands.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor(row_background)))
 
+    style_commands.extend(
+        [
+            ("BACKGROUND", (-2, 0), (-1, -1), colors.HexColor("#eef4fa")),
+            ("FONTNAME", (-2, 1), (-1, -1), "Helvetica-Bold"),
+        ]
+    )
+
     for day in range(1, 32):
-        column_index = 3 + day
+        column_index = 2 + day
         if day > calendar.monthrange(year, month)[1]:
             style_commands.append(("BACKGROUND", (column_index, 0), (column_index, -1), colors.HexColor("#e5e7eb")))
             style_commands.append(("TEXTCOLOR", (column_index, 1), (column_index, -1), colors.HexColor("#94a3b8")))
             continue
         if calendar.weekday(year, month, day) >= 5:
-            style_commands.append(("BACKGROUND", (column_index, 0), (column_index, -1), colors.HexColor("#f3f4f6")))
+            style_commands.append(("BACKGROUND", (column_index, 0), (column_index, -1), colors.HexColor("#f1f5f9")))
 
     table.setStyle(TableStyle(style_commands))
     return table
