@@ -40,9 +40,19 @@ def _is_legacy_public_holiday_schema_error(exc: OperationalError) -> bool:
         marker in message
         for marker in (
             "public_holidays.site_id",
+            "public_holidays.notes",
+            "public_holidays.created_at",
             "no such table: public_holidays",
+            "no such column: site_id",
+            "no such column: notes",
+            "no such column: created_at",
             "column public_holidays.site_id does not exist",
+            "column public_holidays.notes does not exist",
+            "column public_holidays.created_at does not exist",
             "column \"site_id\" does not exist",
+            "column \"notes\" does not exist",
+            "column \"created_at\" does not exist",
+            "relation \"public_holidays\" does not exist",
         )
     )
 
@@ -53,11 +63,42 @@ async def _list_legacy_public_holidays_in_range(
     start_date: date,
     end_date: date,
 ) -> Sequence[object]:
+    connection = await session.connection()
+    dialect = connection.dialect.name
+    if dialect == "sqlite":
+        column_result = await connection.execute(text("PRAGMA table_info(public_holidays)"))
+        column_names = {row[1] for row in column_result.fetchall()}
+    elif dialect == "postgresql":
+        column_result = await connection.execute(
+            text(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'public_holidays'
+                """
+            )
+        )
+        column_names = {row[0] for row in column_result.fetchall()}
+    else:
+        column_names = {"id", "name", "holiday_date", "site_id", "notes", "created_at"}
+
+    if not {"id", "name", "holiday_date"}.issubset(column_names):
+        return []
+
+    select_expressions = {
+        "id": "id",
+        "name": "name",
+        "holiday_date": "holiday_date",
+        "site_id": "site_id" if "site_id" in column_names else "NULL AS site_id",
+        "notes": "notes" if "notes" in column_names else "NULL AS notes",
+        "created_at": "created_at" if "created_at" in column_names else "NULL AS created_at",
+    }
     try:
         result = await session.execute(
             text(
-                """
-                SELECT id, name, holiday_date, notes, created_at
+                f"""
+                SELECT {select_expressions["id"]}, {select_expressions["name"]}, {select_expressions["holiday_date"]},
+                       {select_expressions["site_id"]}, {select_expressions["notes"]}, {select_expressions["created_at"]}
                 FROM public_holidays
                 WHERE holiday_date >= :start_date AND holiday_date <= :end_date
                 ORDER BY holiday_date ASC, name ASC
