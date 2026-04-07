@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import date
+from types import SimpleNamespace
 from typing import Optional
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -24,6 +26,75 @@ def public_holiday_label(public_holiday: Optional[PublicHoliday]) -> Optional[st
     if not public_holiday:
         return None
     return public_holiday.name.strip()
+
+
+def _coerce_holiday_date(value: object) -> date:
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
+
+
+def _is_legacy_public_holiday_schema_error(exc: OperationalError) -> bool:
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in (
+            "public_holidays.site_id",
+            "no such table: public_holidays",
+            "column public_holidays.site_id does not exist",
+            "column \"site_id\" does not exist",
+        )
+    )
+
+
+async def _list_legacy_public_holidays_in_range(
+    session: AsyncSession,
+    *,
+    start_date: date,
+    end_date: date,
+) -> Sequence[object]:
+    try:
+        result = await session.execute(
+            text(
+                """
+                SELECT id, name, holiday_date, notes, created_at
+                FROM public_holidays
+                WHERE holiday_date >= :start_date AND holiday_date <= :end_date
+                ORDER BY holiday_date ASC, name ASC
+                """
+            ),
+            {"start_date": start_date, "end_date": end_date},
+        )
+    except OperationalError as exc:
+        if _is_legacy_public_holiday_schema_error(exc):
+            return []
+        raise
+
+    return [
+        SimpleNamespace(
+            id=row.id,
+            name=row.name,
+            holiday_date=_coerce_holiday_date(row.holiday_date),
+            site_id=None,
+            notes=row.notes,
+            created_at=row.created_at,
+            site=None,
+        )
+        for row in result
+    ]
+
+
+async def _get_legacy_public_holiday_for_date(
+    session: AsyncSession,
+    *,
+    target_date: date,
+) -> Optional[object]:
+    legacy_rows = await _list_legacy_public_holidays_in_range(
+        session,
+        start_date=target_date,
+        end_date=target_date,
+    )
+    return next(iter(legacy_rows), None)
 
 
 async def get_public_holiday(session: AsyncSession, holiday_id: int) -> Optional[PublicHoliday]:
@@ -51,7 +122,12 @@ async def get_public_holiday_for_date(
         query = query.where(PublicHoliday.site_id.is_(None))
     else:
         query = query.where(or_(PublicHoliday.site_id == site_id, PublicHoliday.site_id.is_(None)))
-    result = await session.execute(query)
+    try:
+        result = await session.execute(query)
+    except OperationalError as exc:
+        if _is_legacy_public_holiday_schema_error(exc):
+            return await _get_legacy_public_holiday_for_date(session, target_date=target_date)
+        raise
     return result.scalars().first()
 
 
@@ -61,15 +137,20 @@ async def list_public_holidays_in_range(
     start_date: date,
     end_date: date,
 ) -> Sequence[PublicHoliday]:
-    result = await session.execute(
-        select(PublicHoliday)
-        .options(selectinload(PublicHoliday.site))
-        .where(
-            PublicHoliday.holiday_date >= start_date,
-            PublicHoliday.holiday_date <= end_date,
+    try:
+        result = await session.execute(
+            select(PublicHoliday)
+            .options(selectinload(PublicHoliday.site))
+            .where(
+                PublicHoliday.holiday_date >= start_date,
+                PublicHoliday.holiday_date <= end_date,
+            )
+            .order_by(PublicHoliday.holiday_date.asc(), PublicHoliday.name.asc())
         )
-        .order_by(PublicHoliday.holiday_date.asc(), PublicHoliday.name.asc())
-    )
+    except OperationalError as exc:
+        if _is_legacy_public_holiday_schema_error(exc):
+            return await _list_legacy_public_holidays_in_range(session, start_date=start_date, end_date=end_date)
+        raise
     return result.scalars().all()
 
 
