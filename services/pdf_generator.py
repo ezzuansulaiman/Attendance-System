@@ -17,9 +17,9 @@ PAGE_WIDTH, _ = landscape(A4)
 PDF_COPY = {
     "eyebrow": "MONTHLY ATTENDANCE",
     "title": "Attendance Report",
-    "subtitle": "Professional monthly workforce attendance register",
     "footer_label": "Attendance Report",
-    "metadata_labels": ("Company", "Site", "Period", "Generated On"),
+    "header_generated_label": "Generated On",
+    "metadata_labels": ("Company", "Site", "Period"),
 }
 
 
@@ -47,16 +47,6 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             fontSize=20,
             leading=23,
             textColor=colors.white,
-            alignment=TA_LEFT,
-            spaceAfter=0,
-        ),
-        "subtitle": ParagraphStyle(
-            "ReportSubtitle",
-            parent=sample_styles["BodyText"],
-            fontName="Helvetica",
-            fontSize=8.6,
-            leading=11,
-            textColor=colors.HexColor("#dbeafe"),
             alignment=TA_LEFT,
             spaceAfter=0,
         ),
@@ -144,19 +134,14 @@ def _build_styles() -> dict[str, ParagraphStyle]:
 
 
 def _build_header_band(*, report: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
-    period_value = _paragraph(report["period_label"], styles["header_meta_value"])
-    site_value = _paragraph(report["site_name"], styles["header_meta_value"])
+    generated_value = _paragraph(report["generated_at"], styles["header_meta_value"])
     left_column = [
         _paragraph(PDF_COPY["eyebrow"], styles["eyebrow"]),
         _paragraph(PDF_COPY["title"], styles["title"]),
-        _paragraph(PDF_COPY["subtitle"], styles["subtitle"]),
     ]
     right_column = [
-        _paragraph("Reporting Period", styles["header_meta_label"]),
-        period_value,
-        Spacer(1, 4),
-        _paragraph("Site", styles["header_meta_label"]),
-        site_value,
+        _paragraph(PDF_COPY["header_generated_label"], styles["header_meta_label"]),
+        generated_value,
     ]
     header = Table([[left_column, right_column]], colWidths=[163 * mm, 92 * mm])
     header.setStyle(
@@ -176,7 +161,7 @@ def _build_header_band(*, report: dict[str, Any], styles: dict[str, ParagraphSty
 
 
 def _build_metadata_table(*, report: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
-    company_label, site_label, period_label, generated_label = PDF_COPY["metadata_labels"]
+    company_label, site_label, period_label = PDF_COPY["metadata_labels"]
     metadata_cells = [
         [
             _paragraph(company_label, styles["meta_label"]),
@@ -190,12 +175,8 @@ def _build_metadata_table(*, report: dict[str, Any], styles: dict[str, Paragraph
             _paragraph(period_label, styles["meta_label"]),
             _paragraph(report["period_label"], styles["meta_value"]),
         ],
-        [
-            _paragraph(generated_label, styles["meta_label"]),
-            _paragraph(report["generated_at"], styles["meta_value"]),
-        ],
     ]
-    metadata_table = Table([metadata_cells], colWidths=[63 * mm, 56 * mm, 63 * mm, 73 * mm])
+    metadata_table = Table([metadata_cells], colWidths=[84 * mm, 84 * mm, 87 * mm])
     metadata_table.setStyle(
         TableStyle(
             [
@@ -225,8 +206,6 @@ def _build_attendance_table(*, report: dict[str, Any], styles: dict[str, Paragra
             _paragraph("Employee Name", styles["table_header"]),
             _paragraph("Code", styles["table_header"]),
             *[_paragraph(str(day), styles["table_header"]) for day in range(1, 32)],
-            _paragraph("Present", styles["table_header"]),
-            _paragraph("Complete", styles["table_header"]),
         ]
     ]
 
@@ -237,8 +216,6 @@ def _build_attendance_table(*, report: dict[str, Any], styles: dict[str, Paragra
                 _paragraph(row["worker_name"], styles["table_name"]),
                 _paragraph(row["employee_code"], styles["table_cell"]),
                 *[_paragraph(value or "", styles["table_cell"]) for value in row["days"]],
-                _paragraph(row["present_days"], styles["table_total"]),
-                _paragraph(row["completed_days"], styles["table_total"]),
             ]
         )
 
@@ -249,12 +226,10 @@ def _build_attendance_table(*, report: dict[str, Any], styles: dict[str, Paragra
                 _paragraph("No active workers were found for the selected period.", styles["table_name"]),
                 "",
                 *([""] * 31),
-                "",
-                "",
             ]
         )
 
-    table = Table(table_data, colWidths=[21, 158, 48] + [12.6] * 31 + [34, 38], repeatRows=1)
+    table = Table(table_data, colWidths=[21, 184, 52] + [13.9] * 31, repeatRows=1)
     style_commands: list[tuple[Any, ...]] = [
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#12304f")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -272,12 +247,11 @@ def _build_attendance_table(*, report: dict[str, Any], styles: dict[str, Paragra
         ("ALIGN", (1, 1), (1, -1), "LEFT"),
         ("LEFTPADDING", (1, 1), (1, -1), 5.5),
         ("BACKGROUND", (0, 1), (2, -1), colors.HexColor("#f8fafc")),
-        ("BACKGROUND", (-2, 1), (-1, -1), colors.HexColor("#eff6ff")),
     ]
 
     for row_index in range(1, len(table_data)):
         row_background = "#ffffff" if row_index % 2 else "#f8fbff"
-        style_commands.append(("BACKGROUND", (3, row_index), (-3, row_index), colors.HexColor(row_background)))
+        style_commands.append(("BACKGROUND", (3, row_index), (-1, row_index), colors.HexColor(row_background)))
 
     for day in range(1, 32):
         column_index = 2 + day

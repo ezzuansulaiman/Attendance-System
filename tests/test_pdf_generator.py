@@ -26,16 +26,16 @@ def _sample_report() -> dict:
 def test_pdf_copy_uses_professional_report_labels() -> None:
     assert PDF_COPY["eyebrow"] == "MONTHLY ATTENDANCE"
     assert PDF_COPY["title"] == "Attendance Report"
-    assert PDF_COPY["subtitle"] == "Professional monthly workforce attendance register"
     assert PDF_COPY["footer_label"] == "Attendance Report"
-    assert PDF_COPY["metadata_labels"] == ("Company", "Site", "Period", "Generated On")
+    assert PDF_COPY["header_generated_label"] == "Generated On"
+    assert PDF_COPY["metadata_labels"] == ("Company", "Site", "Period")
     assert "summary_labels" not in PDF_COPY
 
     rendered_copy = " | ".join(
         [
             PDF_COPY["eyebrow"],
             PDF_COPY["title"],
-            PDF_COPY["subtitle"],
+            PDF_COPY["header_generated_label"],
             PDF_COPY["footer_label"],
             *PDF_COPY["metadata_labels"],
         ]
@@ -45,6 +45,7 @@ def test_pdf_copy_uses_professional_report_labels() -> None:
     assert "Prepared for client submission" not in rendered_copy
     assert "Computer generated report. No signature is required." not in rendered_copy
     assert "Monthly attendance submission" not in rendered_copy
+    assert "Professional monthly workforce attendance register" not in rendered_copy
 
 
 def test_build_monthly_attendance_pdf_returns_content_without_summary() -> None:
