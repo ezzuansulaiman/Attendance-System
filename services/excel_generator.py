@@ -279,6 +279,7 @@ def _build_summary_sheet(report: dict[str, Any]) -> str:
     rows.append(_build_row(row_index, [_text_cell(row_index, 1, "Submission Notes", 3)]))
     row_index += 1
     notes = [
+        "Computer generated report. No signature is required.",
         "Use the Attendance Matrix sheet for the main client-facing monthly schedule.",
         "Use the Detailed Log sheet if the client requests timestamp-level verification.",
         "Weekend columns are shaded for quick review. Non-month days are muted out.",
@@ -290,7 +291,7 @@ def _build_summary_sheet(report: dict[str, Any]) -> str:
     return _worksheet_xml(
         rows=rows,
         column_widths=[24, 28, 4, 16, 30, 18],
-        merges=["A1:F1", "A2:F2", "A12:F12", "A13:F13", "A14:F14", "A15:F15"],
+        merges=["A1:F1", "A2:F2", "A12:F12", "A13:F13", "A14:F14", "A15:F15", "A16:F16"],
         last_row=row_index - 1,
         last_column=last_column,
     )

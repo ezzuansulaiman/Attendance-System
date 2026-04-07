@@ -5,7 +5,7 @@ import io
 from typing import Any
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
@@ -63,14 +63,14 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             textColor=colors.HexColor("#0f172a"),
             alignment=TA_LEFT,
         ),
-        "signature_label": ParagraphStyle(
-            "SignatureLabel",
+        "system_note": ParagraphStyle(
+            "SystemNote",
             parent=sample_styles["BodyText"],
-            fontName="Helvetica-Bold",
+            fontName="Helvetica-Oblique",
             fontSize=8,
             leading=10,
-            textColor=colors.HexColor("#334155"),
-            alignment=TA_CENTER,
+            textColor=colors.HexColor("#475569"),
+            alignment=TA_LEFT,
         ),
     }
 
@@ -206,38 +206,24 @@ def _build_attendance_table(*, report: dict[str, Any]) -> Table:
     return table
 
 
-def _build_signatures(styles: dict[str, ParagraphStyle]) -> Table:
-    signature_table = Table(
-        [
-            [
-                Paragraph("Prepared By", styles["signature_label"]),
-                Paragraph("Checked By", styles["signature_label"]),
-                Paragraph("Verified By", styles["signature_label"]),
-            ],
-            [
-                "\n\n____________________________",
-                "\n\n____________________________",
-                "\n\n____________________________",
-            ],
-            ["Name:", "Name:", "Name:"],
-            ["Date:", "Date:", "Date:"],
-        ],
-        colWidths=[85 * mm, 85 * mm, 85 * mm],
+def _build_system_generated_note(styles: dict[str, ParagraphStyle]) -> Table:
+    note_table = Table(
+        [[Paragraph("Computer generated report. No signature is required.", styles["system_note"])]],
+        colWidths=[261 * mm],
     )
-    signature_table.setStyle(
+    note_table.setStyle(
         TableStyle(
             [
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#334155")),
-                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-                ("FONTSIZE", (0, 1), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#cbd5e1")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
             ]
         )
     )
-    return signature_table
+    return note_table
 
 
 def _draw_footer(canvas, document) -> None:
@@ -281,7 +267,7 @@ def build_monthly_attendance_pdf(*, report: dict[str, Any]) -> bytes:
         Spacer(1, 10),
         _build_attendance_table(report=report),
         Spacer(1, 14),
-        _build_signatures(styles),
+        _build_system_generated_note(styles),
     ]
     document.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     return buffer.getvalue()
