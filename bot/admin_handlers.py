@@ -9,7 +9,7 @@ from aiogram.types import BotCommand, BufferedInputFile, CallbackQuery, Message
 
 from bot.context import is_admin, local_tz
 from bot.keyboards import ADMIN_MENU_BUTTON, admin_menu_keyboard, is_admin_menu_alias, leave_review_keyboard
-from bot.leave_handlers import notify_worker_review
+from bot.notifications import send_leave_review_to_worker
 from bot.messages import admin_menu_text, build_leave_summary_text
 from config import get_settings
 from models import session_scope
@@ -20,6 +20,7 @@ from services.leave_service import (
     list_pending_leave_requests,
     reject_leave_request,
 )
+from services.report_service import generate_monthly_attendance_excel
 from services.report_service import generate_monthly_attendance_pdf
 
 router = Router()
@@ -37,7 +38,7 @@ async def send_admin_menu_message(message: Message) -> None:
 @router.message(F.text.func(is_admin_menu_alias))
 async def admin_menu(message: Message) -> None:
     if not is_admin(message.from_user.id):
-        await message.answer("This command is restricted to Telegram admins configured in ADMIN_IDS.")
+        await message.answer("Arahan ini hanya untuk pentadbir Telegram yang didaftarkan dalam ADMIN_IDS.")
         return
     await send_admin_menu_message(message)
 
@@ -54,14 +55,14 @@ async def admin_menu_from_text_button(message: Message) -> None:
 async def show_pending_leaves(callback: CallbackQuery) -> None:
     await callback.answer()
     if not is_admin(callback.from_user.id):
-        await callback.message.answer("Admin access required.")
+        await callback.message.answer("Akses pentadbir diperlukan.")
         return
 
     async with session_scope() as session:
         pending_requests = await list_pending_leave_requests(session)
 
     if not pending_requests:
-        await callback.message.answer("There are no pending leave requests.")
+        await callback.message.answer("Tiada permohonan cuti yang menunggu semakan.")
         return
 
     for leave_request in pending_requests:
@@ -91,7 +92,7 @@ async def show_pending_leaves(callback: CallbackQuery) -> None:
 async def send_current_month_report(callback: CallbackQuery) -> None:
     await callback.answer()
     if not is_admin(callback.from_user.id):
-        await callback.message.answer("Admin access required.")
+        await callback.message.answer("Akses pentadbir diperlukan.")
         return
 
     today = datetime.now(local_tz).date()
@@ -106,20 +107,43 @@ async def send_current_month_report(callback: CallbackQuery) -> None:
     month_name = calendar.month_name[today.month]
     await callback.message.answer_document(
         BufferedInputFile(pdf_bytes, filename=filename),
-        caption=f"{month_name} {today.year} attendance report.",
+        caption=f"Laporan kehadiran {month_name} {today.year}.",
+    )
+
+
+@router.callback_query(F.data == "admin:report:current:excel")
+async def send_current_month_excel(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not is_admin(callback.from_user.id):
+        await callback.message.answer("Akses pentadbir diperlukan.")
+        return
+
+    today = datetime.now(local_tz).date()
+    async with session_scope() as session:
+        excel_bytes = await generate_monthly_attendance_excel(
+            session,
+            year=today.year,
+            month=today.month,
+        )
+
+    filename = f"attendance-{today.year}-{today.month:02d}.xlsx"
+    month_name = calendar.month_name[today.month]
+    await callback.message.answer_document(
+        BufferedInputFile(excel_bytes, filename=filename),
+        caption=f"Laporan Excel kehadiran {month_name} {today.year}.",
     )
 
 
 async def _review_leave(callback: CallbackQuery, *, approve: bool) -> None:
     if not is_admin(callback.from_user.id):
-        await callback.message.answer("Admin access required.")
+        await callback.message.answer("Akses pentadbir diperlukan.")
         return
 
     leave_id = int(callback.data.rsplit(":", 1)[-1])
     async with session_scope() as session:
         leave_request = await get_leave_request(session, leave_id)
         if not leave_request:
-            await callback.message.answer("Leave request not found.")
+            await callback.message.answer("Permohonan cuti tidak ditemui.")
             return
         try:
             if approve:
@@ -139,8 +163,9 @@ async def _review_leave(callback: CallbackQuery, *, approve: bool) -> None:
             return
 
     action = "approved" if approve else "rejected"
-    await callback.message.answer(f"Leave request #{leave_request.id} {action}.")
-    await notify_worker_review(callback.bot, leave_request.id)
+    action_label = "diluluskan" if approve else "ditolak"
+    await callback.message.answer(f"Permohonan cuti #{leave_request.id} telah {action_label}.")
+    await send_leave_review_to_worker(callback.bot, leave_request.id)
 
 
 @router.callback_query(F.data.startswith("leave:approve:"))
@@ -160,6 +185,6 @@ async def set_bot_commands(bot: Bot) -> None:
         [
             BotCommand(command="start", description="Buka menu kehadiran"),
             BotCommand(command="menu", description="Paparkan menu pekerja"),
-            BotCommand(command="admin", description="Open admin controls"),
+            BotCommand(command="admin", description="Paparkan menu pentadbir"),
         ]
     )

@@ -13,7 +13,9 @@ from bot.keyboards import worker_menu_keyboard
 from bot.messages import build_attendance_reminder_text
 from config import Settings, get_settings
 from models import session_scope
-from models.models import Site
+from models.models import AttendanceRecord, Site, Worker
+from services.attendance_service import list_active_workers, list_attendance_for_date
+from services.leave_service import approved_leaves_in_range
 from services.site_service import list_sites
 
 logger = logging.getLogger(__name__)
@@ -59,6 +61,54 @@ def extract_reminder_chat_ids(sites: Sequence[Site], fallback_group_id: Optional
     return tuple(sorted(chat_ids))
 
 
+def worker_reminder_chat_id(worker: Worker, fallback_group_id: Optional[int]) -> Optional[int]:
+    if worker.site and worker.site.telegram_group_id is not None:
+        return worker.site.telegram_group_id
+    return fallback_group_id
+
+
+def select_workers_for_chat(
+    workers: Sequence[Worker],
+    *,
+    chat_id: int,
+    fallback_group_id: Optional[int],
+) -> list[Worker]:
+    return [
+        worker
+        for worker in workers
+        if worker_reminder_chat_id(worker, fallback_group_id) == chat_id
+    ]
+
+
+def pending_worker_names(
+    *,
+    reminder_type: str,
+    workers: Sequence[Worker],
+    attendance_lookup: dict[int, AttendanceRecord],
+    approved_leave_worker_ids: set[int],
+) -> list[str]:
+    names: list[str] = []
+    for worker in workers:
+        if reminder_type == "checkin":
+            if worker.id in approved_leave_worker_ids:
+                continue
+            record = attendance_lookup.get(worker.id)
+            if record and record.check_in_at:
+                continue
+            names.append(worker.full_name)
+            continue
+
+        if reminder_type == "checkout":
+            record = attendance_lookup.get(worker.id)
+            if not record or not record.check_in_at or record.check_out_at:
+                continue
+            names.append(worker.full_name)
+            continue
+
+        raise ValueError(f"Unsupported reminder type: {reminder_type}")
+    return sorted(names)
+
+
 def due_reminder_targets(
     *,
     now: datetime,
@@ -88,6 +138,32 @@ async def resolve_reminder_chat_ids(settings: Settings) -> tuple[int, ...]:
     async with session_scope() as session:
         sites = await list_sites(session, active_only=True)
     return extract_reminder_chat_ids(sites, settings.group_id)
+
+
+async def pending_worker_names_for_chat(
+    *,
+    settings: Settings,
+    chat_id: int,
+    reminder_type: str,
+    target_date: date,
+) -> list[str]:
+    async with session_scope() as session:
+        workers = await list_active_workers(session)
+        workers_for_chat = select_workers_for_chat(workers, chat_id=chat_id, fallback_group_id=settings.group_id)
+        if not workers_for_chat:
+            return []
+
+        attendance_records = await list_attendance_for_date(session, attendance_date=target_date)
+        attendance_lookup = {record.worker_id: record for record in attendance_records}
+        approved_leave_worker_ids = {
+            leave.worker_id for leave in await approved_leaves_in_range(session, start_date=target_date, end_date=target_date)
+        }
+    return pending_worker_names(
+        reminder_type=reminder_type,
+        workers=workers_for_chat,
+        attendance_lookup=attendance_lookup,
+        approved_leave_worker_ids=approved_leave_worker_ids,
+    )
 
 
 async def run_attendance_reminder_loop(bot: Bot) -> None:
@@ -128,10 +204,25 @@ async def run_attendance_reminder_loop(bot: Bot) -> None:
             chat_ids=cached_chat_ids,
             sent_tokens=sent_tokens,
         ):
+            pending_names: Optional[list[str]] = None
+            try:
+                pending_names = await pending_worker_names_for_chat(
+                    settings=settings,
+                    chat_id=chat_id,
+                    reminder_type=slot.key,
+                    target_date=now.date(),
+                )
+            except Exception:
+                logger.exception("Failed to build smart reminder content for chat %s.", chat_id)
+
+            if pending_names == []:
+                sent_tokens.add(reminder_token(target_date=now.date(), slot_key=slot.key, chat_id=chat_id))
+                continue
+
             try:
                 await bot.send_message(
                     chat_id=chat_id,
-                    text=build_attendance_reminder_text(slot.key),
+                    text=build_attendance_reminder_text(slot.key, pending_names=pending_names),
                     reply_markup=worker_menu_keyboard(),
                 )
             except TelegramAPIError:

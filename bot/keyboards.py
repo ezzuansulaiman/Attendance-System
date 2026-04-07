@@ -4,6 +4,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardBu
 
 WORKER_MENU_BUTTON = "Menu Kehadiran"
 ADMIN_MENU_BUTTON = "Menu Admin"
+CANCEL_CALLBACK = "flow:cancel"
+BACK_CALLBACK = "flow:back"
 
 
 def normalize_menu_trigger(raw_text: Optional[str]) -> str:
@@ -16,6 +18,14 @@ def is_worker_menu_alias(raw_text: Optional[str]) -> bool:
 
 def is_admin_menu_alias(raw_text: Optional[str]) -> bool:
     return normalize_menu_trigger(raw_text) == "admin"
+
+
+def is_cancel_alias(raw_text: Optional[str]) -> bool:
+    return normalize_menu_trigger(raw_text) in {"cancel", "batal"}
+
+
+def is_back_alias(raw_text: Optional[str]) -> bool:
+    return normalize_menu_trigger(raw_text) in {"back", "kembali"}
 
 
 def main_menu_keyboard(*, show_worker_menu: bool, show_admin_menu: bool) -> Optional[ReplyKeyboardMarkup]:
@@ -47,7 +57,14 @@ def worker_menu_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="Rekod Masuk", callback_data="attendance:checkin"),
                 InlineKeyboardButton(text="Rekod Keluar", callback_data="attendance:checkout"),
             ],
-            [InlineKeyboardButton(text="Mohon Cuti", callback_data="leave:start")],
+            [
+                InlineKeyboardButton(text="Mohon Cuti", callback_data="leave:start"),
+                InlineKeyboardButton(text="Status Hari Ini", callback_data="worker:status"),
+            ],
+            [
+                InlineKeyboardButton(text="Cuti Saya", callback_data="worker:leaves"),
+                InlineKeyboardButton(text="Profil Saya", callback_data="worker:profile"),
+            ],
         ]
     )
 
@@ -58,17 +75,19 @@ def leave_type_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Cuti Tahunan", callback_data="leave:type:annual")],
             [InlineKeyboardButton(text="Cuti Sakit", callback_data="leave:type:mc")],
             [InlineKeyboardButton(text="Cuti Kecemasan", callback_data="leave:type:emergency")],
+            [InlineKeyboardButton(text="Batal", callback_data=CANCEL_CALLBACK)],
         ]
     )
 
 
 def admin_menu_keyboard(*, web_login_url: Optional[str] = None) -> InlineKeyboardMarkup:
     inline_keyboard = [
-        [InlineKeyboardButton(text="Pending Leaves", callback_data="admin:pending")],
-        [InlineKeyboardButton(text="Current Month PDF", callback_data="admin:report:current")],
+        [InlineKeyboardButton(text="Cuti Menunggu", callback_data="admin:pending")],
+        [InlineKeyboardButton(text="PDF Bulan Semasa", callback_data="admin:report:current")],
+        [InlineKeyboardButton(text="Excel Bulan Semasa", callback_data="admin:report:current:excel")],
     ]
     if web_login_url:
-        inline_keyboard.append([InlineKeyboardButton(text="Open Admin Web", url=web_login_url)])
+        inline_keyboard.append([InlineKeyboardButton(text="Buka Admin Web", url=web_login_url)])
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 
@@ -76,8 +95,38 @@ def leave_review_keyboard(leave_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="Approve", callback_data=f"leave:approve:{leave_id}"),
-                InlineKeyboardButton(text="Reject", callback_data=f"leave:reject:{leave_id}"),
+                InlineKeyboardButton(text="Lulus", callback_data=f"leave:approve:{leave_id}"),
+                InlineKeyboardButton(text="Tolak", callback_data=f"leave:reject:{leave_id}"),
             ]
+        ]
+    )
+
+
+def flow_control_keyboard(
+    *,
+    include_back: bool = True,
+    back_callback: str = BACK_CALLBACK,
+    cancel_callback: str = CANCEL_CALLBACK,
+) -> InlineKeyboardMarkup:
+    row: list[InlineKeyboardButton] = []
+    if include_back:
+        row.append(InlineKeyboardButton(text="Kembali", callback_data=back_callback))
+    row.append(InlineKeyboardButton(text="Batal", callback_data=cancel_callback))
+    return InlineKeyboardMarkup(inline_keyboard=[row])
+
+
+def confirmation_keyboard(
+    *,
+    confirm_callback: str,
+    back_callback: str = BACK_CALLBACK,
+    cancel_callback: str = CANCEL_CALLBACK,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Sahkan", callback_data=confirm_callback)],
+            [
+                InlineKeyboardButton(text="Kembali", callback_data=back_callback),
+                InlineKeyboardButton(text="Batal", callback_data=cancel_callback),
+            ],
         ]
     )

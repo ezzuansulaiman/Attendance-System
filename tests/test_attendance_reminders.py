@@ -1,13 +1,15 @@
-from datetime import datetime, time
+from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 from bot.reminders import (
     ReminderSlot,
     due_reminder_targets,
     extract_reminder_chat_ids,
+    pending_worker_names,
     reminder_token,
+    select_workers_for_chat,
 )
-from models.models import Site
+from models.models import AttendanceRecord, Site, Worker
 
 
 LOCAL_TZ = ZoneInfo("Asia/Kuala_Lumpur")
@@ -74,3 +76,57 @@ def test_extract_reminder_chat_ids_uses_site_groups_and_global_fallback() -> Non
     chat_ids = extract_reminder_chat_ids(sites, fallback_group_id=-10077)
 
     assert chat_ids == (-10077, -10010)
+
+
+def test_select_workers_for_chat_routes_site_groups_and_fallback_group() -> None:
+    alpha = Site(id=1, name="Alpha", code="ALPHA", telegram_group_id=-10010, is_active=True)
+    beta = Site(id=2, name="Beta", code="BETA", telegram_group_id=None, is_active=True)
+    workers = [
+        Worker(id=1, telegram_user_id=101, full_name="Ali", site=alpha, site_id=1, is_active=True),
+        Worker(id=2, telegram_user_id=102, full_name="Bala", site=beta, site_id=2, is_active=True),
+        Worker(id=3, telegram_user_id=103, full_name="Chen", site=None, site_id=None, is_active=True),
+    ]
+
+    alpha_workers = select_workers_for_chat(workers, chat_id=-10010, fallback_group_id=-10077)
+    fallback_workers = select_workers_for_chat(workers, chat_id=-10077, fallback_group_id=-10077)
+
+    assert [worker.full_name for worker in alpha_workers] == ["Ali"]
+    assert [worker.full_name for worker in fallback_workers] == ["Bala", "Chen"]
+
+
+def test_pending_worker_names_skip_approved_leave_and_completed_checkout() -> None:
+    workers = [
+        Worker(id=1, telegram_user_id=101, full_name="Ali", is_active=True),
+        Worker(id=2, telegram_user_id=102, full_name="Bala", is_active=True),
+        Worker(id=3, telegram_user_id=103, full_name="Chen", is_active=True),
+    ]
+    attendance_lookup = {
+        1: AttendanceRecord(worker_id=1, attendance_date=date(2026, 4, 7)),
+        2: AttendanceRecord(
+            worker_id=2,
+            attendance_date=date(2026, 4, 7),
+            check_in_at=datetime(2026, 4, 7, 8, 0, tzinfo=LOCAL_TZ),
+        ),
+        3: AttendanceRecord(
+            worker_id=3,
+            attendance_date=date(2026, 4, 7),
+            check_in_at=datetime(2026, 4, 7, 8, 0, tzinfo=LOCAL_TZ),
+            check_out_at=datetime(2026, 4, 7, 17, 0, tzinfo=LOCAL_TZ),
+        ),
+    }
+
+    checkin_pending = pending_worker_names(
+        reminder_type="checkin",
+        workers=workers,
+        attendance_lookup=attendance_lookup,
+        approved_leave_worker_ids={1},
+    )
+    checkout_pending = pending_worker_names(
+        reminder_type="checkout",
+        workers=workers,
+        attendance_lookup=attendance_lookup,
+        approved_leave_worker_ids=set(),
+    )
+
+    assert checkin_pending == []
+    assert checkout_pending == ["Bala"]

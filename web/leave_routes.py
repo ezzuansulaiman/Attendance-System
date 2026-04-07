@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from bot.notifications import send_leave_review_to_worker_via_configured_bot
 from models import session_scope
 from services.leave_service import (
     LeaveError,
@@ -49,13 +50,13 @@ async def leaves(request: Request, site_id: Optional[int] = None) -> Response:
     )
 
 
-async def _review_leave(leave_id: int, *, approve: bool, reviewer: Optional[str]) -> None:
+async def _review_leave(leave_id: int, *, approve: bool, reviewer: Optional[str]) -> Optional[int]:
     async with session_scope() as session:
         leave_request = await get_leave_request(session, leave_id)
         if not leave_request:
-            return
-        notes_prefix = "Approved" if approve else "Rejected"
-        review_note = f"{notes_prefix} from web dashboard"
+            return None
+        notes_prefix = "Diluluskan" if approve else "Ditolak"
+        review_note = f"{notes_prefix} dari dashboard web"
         if reviewer:
             review_note = f"{review_note} by {reviewer}"
         try:
@@ -74,7 +75,8 @@ async def _review_leave(leave_id: int, *, approve: bool, reviewer: Optional[str]
                     notes=review_note,
                 )
         except LeaveError:
-            return
+            return None
+    return leave_id
 
 
 @router.post("/{leave_id}/approve", name="leaves_approve")
@@ -101,7 +103,9 @@ async def leaves_approve(
             {"leaves": leave_items, "sites": sites, "selected_site_id": site_id, "error": str(exc)},
             status_code=400,
         )
-    await _review_leave(leave_id, approve=True, reviewer=current_admin_username(request))
+    reviewed_leave_id = await _review_leave(leave_id, approve=True, reviewer=current_admin_username(request))
+    if reviewed_leave_id is not None:
+        await send_leave_review_to_worker_via_configured_bot(reviewed_leave_id)
     return RedirectResponse(
         url=_leaves_redirect_url(request, site_id=site_id, return_to=return_to),
         status_code=303,
@@ -132,7 +136,9 @@ async def leaves_reject(
             {"leaves": leave_items, "sites": sites, "selected_site_id": site_id, "error": str(exc)},
             status_code=400,
         )
-    await _review_leave(leave_id, approve=False, reviewer=current_admin_username(request))
+    reviewed_leave_id = await _review_leave(leave_id, approve=False, reviewer=current_admin_username(request))
+    if reviewed_leave_id is not None:
+        await send_leave_review_to_worker_via_configured_bot(reviewed_leave_id)
     return RedirectResponse(
         url=_leaves_redirect_url(request, site_id=site_id, return_to=return_to),
         status_code=303,

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
-
-from aiogram import Bot, F, Router
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -10,11 +8,18 @@ from bot.context import (
     leave_restriction_text,
     load_registered_worker,
     registered_workers_only_text,
-    settings,
     worker_chat_is_allowed,
 )
-from bot.keyboards import leave_review_keyboard, leave_type_keyboard
-from bot.messages import build_leave_review_text, build_leave_summary_text, parse_user_date
+from bot.keyboards import (
+    confirmation_keyboard,
+    flow_control_keyboard,
+    is_back_alias,
+    is_cancel_alias,
+    worker_menu_keyboard,
+    leave_type_keyboard,
+)
+from bot.messages import build_leave_confirmation_text, build_leave_summary_text, parse_user_date
+from bot.notifications import send_leave_request_to_admins
 from bot.states import LeaveApplicationStates
 from models import session_scope
 from services.attendance_service import get_worker_by_telegram_id
@@ -22,72 +27,16 @@ from services.leave_service import (
     LeaveError,
     annual_leave_notice_text,
     create_leave_request,
-    get_leave_request,
     is_supported_leave_type,
     leave_label,
 )
 
 router = Router()
+LEAVE_BACK_CALLBACK = "leave:back"
+LEAVE_CANCEL_CALLBACK = "leave:cancel"
 
 
-async def _notify_admins(bot: Bot, leave_request_id: int) -> None:
-    async with session_scope() as session:
-        leave_request = await get_leave_request(session, leave_request_id)
-        if not leave_request:
-            return
-
-        text = build_leave_summary_text(
-            leave_request.id,
-            leave_request.worker.full_name,
-            leave_request.leave_type,
-            leave_request.start_date,
-            leave_request.end_date,
-            leave_request.reason,
-        )
-        for admin_id in settings.admin_ids:
-            try:
-                if leave_request.telegram_file_id:
-                    await bot.send_photo(
-                        chat_id=admin_id,
-                        photo=leave_request.telegram_file_id,
-                        caption=text,
-                        reply_markup=leave_review_keyboard(leave_request.id),
-                    )
-                else:
-                    await bot.send_message(
-                        chat_id=admin_id,
-                        text=text,
-                        reply_markup=leave_review_keyboard(leave_request.id),
-                    )
-            except Exception:
-                continue
-
-
-async def notify_worker_review(bot: Bot, leave_request_id: int) -> None:
-    async with session_scope() as session:
-        leave_request = await get_leave_request(session, leave_request_id)
-        if not leave_request:
-            return
-        try:
-            await bot.send_message(
-                chat_id=leave_request.worker.telegram_user_id,
-                text=build_leave_review_text(
-                    leave_request.id,
-                    leave_request.leave_type,
-                    leave_request.start_date,
-                    leave_request.end_date,
-                    leave_request.status,
-                ),
-            )
-        except Exception:
-            return
-
-
-async def _submit_leave_request(
-    message: Message,
-    state: FSMContext,
-    telegram_file_id: Optional[str] = None,
-) -> None:
+async def _submit_leave_request(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     async with session_scope() as session:
         worker = await get_worker_by_telegram_id(session, message.from_user.id)
@@ -104,7 +53,7 @@ async def _submit_leave_request(
                 start_date=data["start_date"],
                 end_date=data["end_date"],
                 reason=data["reason"],
-                telegram_file_id=telegram_file_id,
+                telegram_file_id=data.get("telegram_file_id"),
             )
         except LeaveError as exc:
             await message.answer(str(exc))
@@ -122,8 +71,92 @@ async def _submit_leave_request(
         )
         + "\nStatus: DALAM SEMAKAN"
     )
-    await _notify_admins(message.bot, leave_request.id)
+    await send_leave_request_to_admins(message.bot, leave_request.id)
     await state.clear()
+
+
+async def _show_leave_type_prompt(target: Message, *, editing: bool = False) -> None:
+    intro = "Sila pilih jenis cuti." if not editing else "Baik, sila pilih semula jenis cuti."
+    await target.answer(intro, reply_markup=leave_type_keyboard())
+
+
+async def _show_leave_confirmation(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    async with session_scope() as session:
+        worker = await get_worker_by_telegram_id(session, message.from_user.id)
+    if not worker:
+        await message.answer(registered_workers_only_text())
+        await state.clear()
+        return
+
+    await state.set_state(LeaveApplicationStates.confirmation)
+    await message.answer(
+        build_leave_confirmation_text(
+            worker_name=worker.full_name,
+            leave_type=data["leave_type"],
+            start_date=data["start_date"],
+            end_date=data["end_date"],
+            reason=data["reason"],
+            has_supporting_photo=bool(data.get("telegram_file_id")),
+        ),
+        reply_markup=confirmation_keyboard(
+            confirm_callback="leave:confirm",
+            back_callback=LEAVE_BACK_CALLBACK,
+            cancel_callback=LEAVE_CANCEL_CALLBACK,
+        ),
+    )
+
+
+async def _cancel_leave_flow(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer("Permohonan cuti dibatalkan. Anda boleh kembali ke menu pekerja.", reply_markup=worker_menu_keyboard())
+
+
+async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    data = await state.get_data()
+
+    if current_state == LeaveApplicationStates.start_date.state:
+        await state.set_state(LeaveApplicationStates.leave_type)
+        await _show_leave_type_prompt(message, editing=True)
+        return
+    if current_state == LeaveApplicationStates.end_date.state:
+        await state.set_state(LeaveApplicationStates.start_date)
+        await message.answer(
+            "Sila hantar semula tarikh mula dalam format YYYY-MM-DD atau DD/MM/YYYY.",
+            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+        )
+        return
+    if current_state == LeaveApplicationStates.reason.state:
+        await state.set_state(LeaveApplicationStates.end_date)
+        await message.answer(
+            "Sila hantar semula tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.",
+            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+        )
+        return
+    if current_state == LeaveApplicationStates.photo.state:
+        await state.set_state(LeaveApplicationStates.reason)
+        await message.answer(
+            "Sila hantar semula sebab ringkas bagi permohonan cuti ini.",
+            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+        )
+        return
+    if current_state == LeaveApplicationStates.confirmation.state:
+        if data.get("leave_type") in {"mc", "emergency"}:
+            await state.set_state(LeaveApplicationStates.photo)
+            await message.answer(
+                "Sila muat naik semula gambar sokongan. Hanya Telegram file_id akan disimpan.",
+                reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+            )
+            return
+        await state.set_state(LeaveApplicationStates.reason)
+        await message.answer(
+            "Sila hantar semula sebab ringkas bagi permohonan cuti ini.",
+            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+        )
+        return
+
+    await message.answer("Anda sudah berada di langkah pertama. Tekan jenis cuti atau pilih Batal.")
 
 
 @router.callback_query(F.data == "leave:start")
@@ -139,7 +172,7 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext) -> None:
 
     await state.clear()
     await state.set_state(LeaveApplicationStates.leave_type)
-    await callback.message.answer("Sila pilih jenis cuti.", reply_markup=leave_type_keyboard())
+    await _show_leave_type_prompt(callback.message)
 
 
 @router.callback_query(F.data.startswith("leave:type:"))
@@ -156,11 +189,21 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
     if leave_type == "annual":
         prompt_lines.append(annual_leave_notice_text())
     prompt_lines.append("Sila hantar tarikh mula dalam format YYYY-MM-DD atau DD/MM/YYYY.")
-    await callback.message.answer("\n".join(prompt_lines))
+    await callback.message.answer(
+        "\n".join(prompt_lines),
+        reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+    )
 
 
 @router.message(LeaveApplicationStates.start_date)
 async def capture_start_date(message: Message, state: FSMContext) -> None:
+    if is_cancel_alias(message.text):
+        await _cancel_leave_flow(message, state)
+        return
+    if is_back_alias(message.text):
+        await _step_back_in_leave_flow(message, state)
+        return
+
     try:
         start_date = parse_user_date(message.text or "")
     except ValueError as exc:
@@ -169,11 +212,21 @@ async def capture_start_date(message: Message, state: FSMContext) -> None:
 
     await state.update_data(start_date=start_date)
     await state.set_state(LeaveApplicationStates.end_date)
-    await message.answer("Baik, sekarang sila hantar tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.")
+    await message.answer(
+        "Baik, sekarang sila hantar tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.",
+        reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+    )
 
 
 @router.message(LeaveApplicationStates.end_date)
 async def capture_end_date(message: Message, state: FSMContext) -> None:
+    if is_cancel_alias(message.text):
+        await _cancel_leave_flow(message, state)
+        return
+    if is_back_alias(message.text):
+        await _step_back_in_leave_flow(message, state)
+        return
+
     try:
         end_date = parse_user_date(message.text or "")
     except ValueError as exc:
@@ -187,11 +240,21 @@ async def capture_end_date(message: Message, state: FSMContext) -> None:
 
     await state.update_data(end_date=end_date)
     await state.set_state(LeaveApplicationStates.reason)
-    await message.answer("Sila hantar sebab ringkas bagi permohonan cuti ini.")
+    await message.answer(
+        "Sila hantar sebab ringkas bagi permohonan cuti ini.",
+        reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+    )
 
 
 @router.message(LeaveApplicationStates.reason)
 async def capture_reason(message: Message, state: FSMContext) -> None:
+    if is_cancel_alias(message.text):
+        await _cancel_leave_flow(message, state)
+        return
+    if is_back_alias(message.text):
+        await _step_back_in_leave_flow(message, state)
+        return
+
     reason = (message.text or "").strip()
     if not reason:
         await message.answer("Sebab permohonan cuti diperlukan.")
@@ -201,18 +264,69 @@ async def capture_reason(message: Message, state: FSMContext) -> None:
     await state.update_data(reason=reason)
     if data["leave_type"] in {"mc", "emergency"}:
         await state.set_state(LeaveApplicationStates.photo)
-        await message.answer("Sila muat naik gambar sokongan sekarang. Hanya Telegram file_id akan disimpan.")
+        await message.answer(
+            "Sila muat naik gambar sokongan sekarang. Hanya Telegram file_id akan disimpan.",
+            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+        )
         return
 
-    await _submit_leave_request(message, state)
+    await _show_leave_confirmation(message, state)
 
 
 @router.message(LeaveApplicationStates.photo, F.photo)
 async def capture_photo(message: Message, state: FSMContext) -> None:
     file_id = message.photo[-1].file_id
-    await _submit_leave_request(message, state, telegram_file_id=file_id)
+    await state.update_data(telegram_file_id=file_id)
+    await _show_leave_confirmation(message, state)
 
 
 @router.message(LeaveApplicationStates.photo)
-async def prompt_photo_again(message: Message) -> None:
+async def prompt_photo_again(message: Message, state: FSMContext) -> None:
+    if is_cancel_alias(message.text):
+        await _cancel_leave_flow(message, state)
+        return
+    if is_back_alias(message.text):
+        await _step_back_in_leave_flow(message, state)
+        return
     await message.answer("Gambar sokongan diperlukan untuk Cuti Sakit dan Cuti Kecemasan. Sila muat naik imej.")
+
+
+@router.callback_query(F.data == "leave:confirm")
+async def confirm_leave_request(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    if await state.get_state() != LeaveApplicationStates.confirmation.state:
+        await callback.message.answer("Permohonan ini sudah tidak aktif. Sila mulakan semula dari menu.")
+        return
+    await _submit_leave_request(callback.message, state)
+
+
+@router.callback_query(F.data == LEAVE_BACK_CALLBACK)
+async def handle_leave_back_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await _step_back_in_leave_flow(callback.message, state)
+
+
+@router.callback_query(F.data == LEAVE_CANCEL_CALLBACK)
+async def handle_leave_cancel_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await _cancel_leave_flow(callback.message, state)
+
+
+@router.message(LeaveApplicationStates.leave_type, F.text.func(is_cancel_alias))
+@router.message(LeaveApplicationStates.start_date, F.text.func(is_cancel_alias))
+@router.message(LeaveApplicationStates.end_date, F.text.func(is_cancel_alias))
+@router.message(LeaveApplicationStates.reason, F.text.func(is_cancel_alias))
+@router.message(LeaveApplicationStates.photo, F.text.func(is_cancel_alias))
+@router.message(LeaveApplicationStates.confirmation, F.text.func(is_cancel_alias))
+async def cancel_leave_from_text(message: Message, state: FSMContext) -> None:
+    await _cancel_leave_flow(message, state)
+
+
+@router.message(LeaveApplicationStates.leave_type, F.text.func(is_back_alias))
+@router.message(LeaveApplicationStates.start_date, F.text.func(is_back_alias))
+@router.message(LeaveApplicationStates.end_date, F.text.func(is_back_alias))
+@router.message(LeaveApplicationStates.reason, F.text.func(is_back_alias))
+@router.message(LeaveApplicationStates.photo, F.text.func(is_back_alias))
+@router.message(LeaveApplicationStates.confirmation, F.text.func(is_back_alias))
+async def go_back_in_leave_from_text(message: Message, state: FSMContext) -> None:
+    await _step_back_in_leave_flow(message, state)

@@ -22,6 +22,7 @@ LEAVE_REPORT_CODES = {
     "mc": "MC",
     "emergency": "EL",
 }
+ACTIVE_REVIEWABLE_STATUSES = ("pending", "approved")
 settings = get_settings()
 
 
@@ -43,6 +44,15 @@ def leave_label(leave_type: str) -> str:
 
 def leave_report_code(leave_type: str) -> str:
     return LEAVE_REPORT_CODES.get(leave_type, leave_type.upper())
+
+
+def leave_status_label(status: str) -> str:
+    labels = {
+        "pending": "Dalam Semakan",
+        "approved": "Diluluskan",
+        "rejected": "Ditolak",
+    }
+    return labels.get(status, status.replace("_", " ").title())
 
 
 def annual_leave_notice_days() -> int:
@@ -92,16 +102,30 @@ async def create_leave_request(
     telegram_file_id: Optional[str] = None,
 ) -> LeaveRequest:
     if not is_supported_leave_type(leave_type):
-        raise LeaveError("Unsupported leave type.")
+        raise LeaveError("Jenis cuti ini tidak disokong.")
     if end_date < start_date:
-        raise LeaveError("End date cannot be earlier than start date.")
+        raise LeaveError("Tarikh akhir tidak boleh lebih awal daripada tarikh mula.")
     if leave_type == "annual":
         today = datetime.now(settings.local_timezone).date()
         notice_days = annual_leave_notice_days()
         if notice_days and (start_date - today).days < notice_days:
             raise LeaveError(annual_leave_notice_text())
+    existing_request_result = await session.execute(
+        select(LeaveRequest).where(
+            LeaveRequest.worker_id == worker.id,
+            LeaveRequest.status.in_(ACTIVE_REVIEWABLE_STATUSES),
+            LeaveRequest.start_date <= end_date,
+            LeaveRequest.end_date >= start_date,
+        )
+    )
+    existing_request = existing_request_result.scalar_one_or_none()
+    if existing_request:
+        raise LeaveError(
+            "Sudah ada permohonan cuti yang bertindih dalam tempoh ini. "
+            "Sila semak permohonan sedia ada sebelum menghantar yang baharu."
+        )
     if leave_requires_photo(leave_type) and not telegram_file_id:
-        raise LeaveError("A Telegram photo is required for this leave type.")
+        raise LeaveError("Gambar sokongan Telegram diperlukan untuk jenis cuti ini.")
 
     request = LeaveRequest(
         worker_id=worker.id,
@@ -139,6 +163,22 @@ async def list_leave_requests(session: AsyncSession, *, site_id: Optional[int] =
     if site_id:
         query = query.where(Worker.site_id == site_id)
     result = await session.execute(query)
+    return result.scalars().all()
+
+
+async def list_leave_requests_for_worker(
+    session: AsyncSession,
+    *,
+    worker_id: int,
+    limit: int = 5,
+) -> Sequence[LeaveRequest]:
+    result = await session.execute(
+        select(LeaveRequest)
+        .options(selectinload(LeaveRequest.worker).selectinload(Worker.site))
+        .where(LeaveRequest.worker_id == worker_id)
+        .order_by(LeaveRequest.submitted_at.desc(), LeaveRequest.id.desc())
+        .limit(limit)
+    )
     return result.scalars().all()
 
 

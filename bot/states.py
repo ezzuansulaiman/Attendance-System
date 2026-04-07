@@ -7,8 +7,10 @@ class LeaveApplicationStates(StatesGroup):
     end_date = State()
     reason = State()
     photo = State()
+    confirmation = State()
 
 
 class RegistrationStates(StatesGroup):
     full_name = State()
     ic_number = State()
+    confirmation = State()

@@ -70,6 +70,19 @@ async def list_workers(session: AsyncSession, *, site_id: Optional[int] = None) 
     return result.scalars().all()
 
 
+async def list_active_workers(session: AsyncSession, *, site_id: Optional[int] = None) -> Sequence[Worker]:
+    query = (
+        select(Worker)
+        .options(selectinload(Worker.site))
+        .where(Worker.is_active.is_(True))
+        .order_by(Worker.full_name)
+    )
+    if site_id:
+        query = query.where(Worker.site_id == site_id)
+    result = await session.execute(query)
+    return result.scalars().all()
+
+
 async def create_worker(
     session: AsyncSession,
     *,
@@ -82,7 +95,7 @@ async def create_worker(
 ) -> Worker:
     existing = await get_worker_by_telegram_id(session, telegram_user_id, active_only=False)
     if existing:
-        raise AttendanceError("Telegram user ID is already registered.")
+        raise AttendanceError("Telegram ID ini sudah berdaftar dalam sistem.")
     if site_id is not None:
         site = await session.get(Site, site_id)
         if not site:
@@ -184,6 +197,15 @@ async def _approved_leave_for_day(
     return result.scalar_one_or_none()
 
 
+async def get_approved_leave_for_day(
+    session: AsyncSession,
+    *,
+    worker_id: int,
+    target_date: date,
+) -> Optional[LeaveRequest]:
+    return await _approved_leave_for_day(session, worker_id, target_date)
+
+
 async def check_in(
     session: AsyncSession,
     *,
@@ -194,7 +216,7 @@ async def check_in(
     attendance_date = occurred_at.date()
     leave = await _approved_leave_for_day(session, worker.id, attendance_date)
     if leave:
-        raise AttendanceError("You already have approved leave for today.")
+        raise AttendanceError("Anda sudah mempunyai cuti yang diluluskan untuk hari ini.")
 
     record = await get_attendance_for_date(
         session,
@@ -202,7 +224,7 @@ async def check_in(
         attendance_date=attendance_date,
     )
     if record and record.check_in_at:
-        raise AttendanceError("You have already checked in today.")
+        raise AttendanceError("Anda sudah merekod masuk untuk hari ini.")
 
     if not record:
         record = AttendanceRecord(
@@ -233,9 +255,9 @@ async def check_out(
         attendance_date=attendance_date,
     )
     if not record or not record.check_in_at:
-        raise AttendanceError("Check-in is required before check-out.")
+        raise AttendanceError("Rekod masuk diperlukan sebelum rekod keluar.")
     if record.check_out_at:
-        raise AttendanceError("You have already checked out today.")
+        raise AttendanceError("Anda sudah merekod keluar untuk hari ini.")
 
     record.check_out_at = occurred_at
     record.source_chat_id = chat_id
@@ -424,4 +446,33 @@ async def recent_attendance(
     if site_id:
         query = query.where(Worker.site_id == site_id)
     result = await session.execute(query)
+    return result.scalars().all()
+
+
+async def list_recent_attendance_for_worker(
+    session: AsyncSession,
+    *,
+    worker_id: int,
+    limit: int = 5,
+) -> Sequence[AttendanceRecord]:
+    result = await session.execute(
+        select(AttendanceRecord)
+        .where(AttendanceRecord.worker_id == worker_id)
+        .order_by(AttendanceRecord.attendance_date.desc(), AttendanceRecord.id.desc())
+        .limit(limit)
+    )
+    return result.scalars().all()
+
+
+async def list_attendance_for_date(
+    session: AsyncSession,
+    *,
+    attendance_date: date,
+) -> Sequence[AttendanceRecord]:
+    result = await session.execute(
+        select(AttendanceRecord)
+        .options(selectinload(AttendanceRecord.worker).selectinload(Worker.site))
+        .join(AttendanceRecord.worker)
+        .where(AttendanceRecord.attendance_date == attendance_date)
+    )
     return result.scalars().all()

@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.context import (
     attendance_restriction_text,
     is_admin,
+    leave_restriction_text,
     load_registered_worker,
     local_tz,
     registered_workers_only_text,
@@ -18,25 +19,40 @@ from bot.context import (
 )
 from bot.keyboards import (
     WORKER_MENU_BUTTON,
+    confirmation_keyboard,
+    flow_control_keyboard,
+    is_back_alias,
+    is_cancel_alias,
     is_worker_menu_alias,
     main_menu_keyboard,
     worker_menu_keyboard,
 )
 from bot.admin_handlers import send_admin_menu_message
-from bot.messages import admin_menu_text, registration_intro_text, worker_menu_text
+from bot.messages import (
+    build_registration_confirmation_text,
+    build_today_status_text,
+    build_worker_leave_history_text,
+    build_worker_profile_text,
+    format_display_date,
+    registration_intro_text,
+    worker_menu_text,
+)
 from bot.states import RegistrationStates
-from config import get_settings
 from models import session_scope
 from services.attendance_service import (
     AttendanceError,
     check_in,
     check_out,
+    get_approved_leave_for_day,
+    get_attendance_for_date,
     get_worker_by_telegram_id,
     self_register_worker,
 )
+from services.leave_service import leave_label, leave_status_label, list_leave_requests_for_worker
 
+REGISTRATION_BACK_CALLBACK = "registration:back"
+REGISTRATION_CANCEL_CALLBACK = "registration:cancel"
 router = Router()
-settings = get_settings()
 
 
 async def _send_navigation_menu(message: Message, *, show_worker_menu: bool, show_admin_menu: bool) -> None:
@@ -54,6 +70,46 @@ async def _send_worker_menu_message(message: Message) -> None:
     await message.answer(worker_menu_text(), reply_markup=worker_menu_keyboard())
 
 
+async def _show_registration_confirmation(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    await state.set_state(RegistrationStates.confirmation)
+    await message.answer(
+        build_registration_confirmation_text(data["full_name"], data["ic_number"]),
+        reply_markup=confirmation_keyboard(
+            confirm_callback="registration:confirm",
+            back_callback=REGISTRATION_BACK_CALLBACK,
+            cancel_callback=REGISTRATION_CANCEL_CALLBACK,
+        ),
+    )
+
+
+async def _cancel_registration_flow(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer("Pendaftaran dibatalkan. Taip <code>menu</code> bila anda mahu mula semula.")
+
+
+async def _step_back_in_registration_flow(message: Message, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    if current_state == RegistrationStates.ic_number.state:
+        await state.set_state(RegistrationStates.full_name)
+        await message.answer(
+            "Baik, sila hantar semula <b>NAMA PENUH</b> anda.",
+            reply_markup=flow_control_keyboard(include_back=False, cancel_callback=REGISTRATION_CANCEL_CALLBACK),
+        )
+        return
+    if current_state == RegistrationStates.confirmation.state:
+        await state.set_state(RegistrationStates.ic_number)
+        await message.answer(
+            "Sila hantar semula <b>NO. IC</b> anda.",
+            reply_markup=flow_control_keyboard(
+                back_callback=REGISTRATION_BACK_CALLBACK,
+                cancel_callback=REGISTRATION_CANCEL_CALLBACK,
+            ),
+        )
+        return
+    await message.answer("Anda sudah berada di langkah pertama pendaftaran.")
+
+
 @router.message(CommandStart())
 @router.message(Command("menu"))
 @router.message(F.text.func(is_worker_menu_alias))
@@ -65,7 +121,10 @@ async def show_menu(message: Message, state: FSMContext) -> None:
         return
     if not worker and not is_admin(message.from_user.id):
         await state.set_state(RegistrationStates.full_name)
-        await message.answer(registration_intro_text())
+        await message.answer(
+            registration_intro_text(),
+            reply_markup=flow_control_keyboard(include_back=False, cancel_callback=REGISTRATION_CANCEL_CALLBACK),
+        )
         return
 
     await _send_navigation_menu(
@@ -137,8 +196,92 @@ async def handle_attendance_action(callback: CallbackQuery) -> None:
             await callback.message.answer(str(exc))
 
 
+@router.callback_query(F.data == "worker:status")
+async def show_worker_status(callback: CallbackQuery) -> None:
+    await callback.answer()
+    async with session_scope() as session:
+        worker = await get_worker_by_telegram_id(session, callback.from_user.id)
+        if not worker:
+            await callback.message.answer(registered_workers_only_text())
+            return
+        if not worker_chat_is_allowed(worker, callback):
+            await callback.message.answer(attendance_restriction_text())
+            return
+
+        today = datetime.now(local_tz).date()
+        attendance = await get_attendance_for_date(session, worker_id=worker.id, attendance_date=today)
+        approved_leave = await get_approved_leave_for_day(session, worker_id=worker.id, target_date=today)
+
+    await callback.message.answer(
+        build_today_status_text(
+            worker_name=worker.full_name,
+            site_name=worker.site.name if worker.site else None,
+            check_in_at=attendance.check_in_at if attendance else None,
+            check_out_at=attendance.check_out_at if attendance else None,
+            approved_leave_label=leave_label(approved_leave.leave_type) if approved_leave else None,
+        ),
+        reply_markup=worker_menu_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "worker:profile")
+async def show_worker_profile(callback: CallbackQuery) -> None:
+    await callback.answer()
+    async with session_scope() as session:
+        worker = await get_worker_by_telegram_id(session, callback.from_user.id)
+    if not worker:
+        await callback.message.answer(registered_workers_only_text())
+        return
+    if not worker_chat_is_allowed(worker, callback):
+        await callback.message.answer(worker_group_restriction_text())
+        return
+
+    await callback.message.answer(
+        build_worker_profile_text(
+            worker_name=worker.full_name,
+            site_name=worker.site.name if worker.site else None,
+            employee_code=worker.employee_code,
+            ic_number=worker.ic_number,
+            telegram_user_id=worker.telegram_user_id,
+        ),
+        reply_markup=worker_menu_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "worker:leaves")
+async def show_worker_leave_history(callback: CallbackQuery) -> None:
+    await callback.answer()
+    async with session_scope() as session:
+        worker = await get_worker_by_telegram_id(session, callback.from_user.id)
+        if not worker:
+            await callback.message.answer(registered_workers_only_text())
+            return
+        if not worker_chat_is_allowed(worker, callback):
+            await callback.message.answer(leave_restriction_text())
+            return
+        leave_items = await list_leave_requests_for_worker(session, worker_id=worker.id, limit=5)
+
+    entries = [
+        {
+            "id": str(item.id),
+            "type": leave_label(item.leave_type),
+            "date_range": f"{format_display_date(item.start_date)} - {format_display_date(item.end_date)}",
+            "status": leave_status_label(item.status),
+        }
+        for item in leave_items
+    ]
+    await callback.message.answer(build_worker_leave_history_text(entries), reply_markup=worker_menu_keyboard())
+
+
 @router.message(RegistrationStates.full_name)
 async def capture_registration_name(message: Message, state: FSMContext) -> None:
+    if is_cancel_alias(message.text):
+        await _cancel_registration_flow(message, state)
+        return
+    if is_back_alias(message.text):
+        await _step_back_in_registration_flow(message, state)
+        return
+
     full_name = (message.text or "").strip()
     if not full_name:
         await message.answer("Sila hantar <b>NAMA PENUH</b> anda.")
@@ -146,38 +289,83 @@ async def capture_registration_name(message: Message, state: FSMContext) -> None
 
     await state.update_data(full_name=full_name)
     await state.set_state(RegistrationStates.ic_number)
-    await message.answer("Baik, sekarang sila hantar <b>NO. IC</b> anda.")
+    await message.answer(
+        "Baik, sekarang sila hantar <b>NO. IC</b> anda.",
+        reply_markup=flow_control_keyboard(
+            back_callback=REGISTRATION_BACK_CALLBACK,
+            cancel_callback=REGISTRATION_CANCEL_CALLBACK,
+        ),
+    )
 
 
 @router.message(RegistrationStates.ic_number)
 async def capture_registration_ic(message: Message, state: FSMContext) -> None:
+    if is_cancel_alias(message.text):
+        await _cancel_registration_flow(message, state)
+        return
+    if is_back_alias(message.text):
+        await _step_back_in_registration_flow(message, state)
+        return
+
     ic_number = (message.text or "").strip()
     if not ic_number:
         await message.answer("Sila hantar <b>NO. IC</b> anda.")
         return
 
+    await state.update_data(ic_number=ic_number)
+    await _show_registration_confirmation(message, state)
+
+
+@router.callback_query(F.data == "registration:confirm")
+async def confirm_registration(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
     data = await state.get_data()
     async with session_scope() as session:
         try:
             worker = await self_register_worker(
                 session,
-                telegram_user_id=message.from_user.id,
+                telegram_user_id=callback.from_user.id,
                 full_name=data["full_name"],
-                ic_number=ic_number,
+                ic_number=data["ic_number"],
             )
         except AttendanceError as exc:
-            await message.answer(str(exc))
+            await callback.message.answer(str(exc))
             await state.clear()
             return
-
     await state.clear()
     await _send_navigation_menu(
-        message,
+        callback.message,
         show_worker_menu=True,
-        show_admin_menu=is_admin(message.from_user.id),
+        show_admin_menu=is_admin(callback.from_user.id),
     )
-    await message.answer(
+    await callback.message.answer(
         f"Pendaftaran untuk {worker.full_name} telah berjaya.\n"
         "Anda kini boleh menggunakan menu kehadiran.",
         reply_markup=worker_menu_keyboard(),
     )
+
+
+@router.callback_query(F.data == REGISTRATION_BACK_CALLBACK)
+async def handle_registration_back_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await _step_back_in_registration_flow(callback.message, state)
+
+
+@router.callback_query(F.data == REGISTRATION_CANCEL_CALLBACK)
+async def handle_registration_cancel_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await _cancel_registration_flow(callback.message, state)
+
+
+@router.message(RegistrationStates.full_name, F.text.func(is_cancel_alias))
+@router.message(RegistrationStates.ic_number, F.text.func(is_cancel_alias))
+@router.message(RegistrationStates.confirmation, F.text.func(is_cancel_alias))
+async def cancel_registration_from_text(message: Message, state: FSMContext) -> None:
+    await _cancel_registration_flow(message, state)
+
+
+@router.message(RegistrationStates.full_name, F.text.func(is_back_alias))
+@router.message(RegistrationStates.ic_number, F.text.func(is_back_alias))
+@router.message(RegistrationStates.confirmation, F.text.func(is_back_alias))
+async def go_back_in_registration_from_text(message: Message, state: FSMContext) -> None:
+    await _step_back_in_registration_flow(message, state)
