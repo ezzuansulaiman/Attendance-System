@@ -5,7 +5,9 @@ from typing import Optional
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from bot.notifications import send_attendance_sync_to_worker_via_configured_bot
 from models import session_scope
+from models.models import AttendanceRecord
 from services.attendance_service import (
     AttendanceError,
     create_or_update_attendance_record,
@@ -46,6 +48,29 @@ def _attendance_redirect_url(
     if site_id:
         url = url.include_query_params(site_id=site_id)
     return str(url)
+
+
+def _attendance_sync_payload(record: Optional[AttendanceRecord]) -> Optional[dict[str, object]]:
+    if not record or record.source_chat_id is None or not record.worker:
+        return None
+    return {
+        "worker_telegram_id": record.worker.telegram_user_id,
+        "attendance_date": record.attendance_date,
+        "check_in_at": record.check_in_at,
+        "check_out_at": record.check_out_at,
+        "notes": record.notes,
+    }
+
+
+async def _notify_worker_about_attendance_change(
+    record: Optional[AttendanceRecord],
+    *,
+    action: str,
+) -> bool:
+    payload = _attendance_sync_payload(record)
+    if not payload:
+        return False
+    return await send_attendance_sync_to_worker_via_configured_bot(action=action, **payload)
 
 
 async def _attendance_page_context(
@@ -129,11 +154,12 @@ async def attendance_create(
         return redirect
 
     selected_month, selected_year = _period_context(month, year)
+    synced_record: Optional[AttendanceRecord] = None
 
     try:
         require_csrf(request, csrf_token)
         async with session_scope() as session:
-            await create_or_update_attendance_record(
+            saved_record = await create_or_update_attendance_record(
                 session,
                 worker_id=worker_id,
                 attendance_date=parse_date(attendance_date),
@@ -141,6 +167,7 @@ async def attendance_create(
                 check_out_at=parse_datetime_local(check_out_at),
                 notes=notes,
             )
+            synced_record = await get_attendance_record(session, saved_record.id)
     except (AttendanceError, FormValidationError, SecurityError) as exc:
         context = await _attendance_page_context(
             month=selected_month,
@@ -160,6 +187,7 @@ async def attendance_create(
             {"error": str(exc), **context},
             status_code=400,
         )
+    await _notify_worker_about_attendance_change(synced_record, action="saved")
     return RedirectResponse(
         url=_attendance_redirect_url(
             request,
@@ -190,6 +218,7 @@ async def attendance_update(
         return redirect
 
     selected_month, selected_year = _period_context(month, year)
+    synced_record: Optional[AttendanceRecord] = None
 
     try:
         require_csrf(request, csrf_token)
@@ -206,7 +235,7 @@ async def attendance_update(
                     ),
                     status_code=303,
                 )
-            await update_attendance_record(
+            saved_record = await update_attendance_record(
                 session,
                 record,
                 worker_id=worker_id,
@@ -215,6 +244,7 @@ async def attendance_update(
                 check_out_at=parse_datetime_local(check_out_at),
                 notes=notes,
             )
+            synced_record = await get_attendance_record(session, saved_record.id)
     except (AttendanceError, FormValidationError, SecurityError) as exc:
         context = await _attendance_page_context(
             month=selected_month,
@@ -235,6 +265,7 @@ async def attendance_update(
             {"error": str(exc), **context},
             status_code=400,
         )
+    await _notify_worker_about_attendance_change(synced_record, action="saved")
     return RedirectResponse(
         url=_attendance_redirect_url(
             request,
@@ -260,12 +291,14 @@ async def attendance_delete(
         return redirect
 
     selected_month, selected_year = _period_context(month, year)
+    deleted_record: Optional[AttendanceRecord] = None
 
     try:
         require_csrf(request, csrf_token)
         async with session_scope() as session:
             record = await get_attendance_record(session, record_id)
             if record:
+                deleted_record = record
                 await delete_attendance_record(session, record)
     except SecurityError as exc:
         context = await _attendance_page_context(
@@ -279,6 +312,7 @@ async def attendance_delete(
             {"error": str(exc), **context},
             status_code=400,
         )
+    await _notify_worker_about_attendance_change(deleted_record, action="deleted")
     return RedirectResponse(
         url=_attendance_redirect_url(
             request,

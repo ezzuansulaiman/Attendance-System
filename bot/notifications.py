@@ -7,7 +7,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from bot.keyboards import leave_review_keyboard
-from bot.messages import build_leave_review_text, build_leave_summary_text
+from bot.messages import build_attendance_sync_text, build_leave_review_text, build_leave_summary_text
 from config import get_settings
 from models import session_scope
 from services.leave_service import get_leave_request
@@ -83,6 +83,63 @@ async def send_leave_review_to_worker_via_configured_bot(leave_request_id: int) 
     )
     try:
         await send_leave_review_to_worker(bot, leave_request_id)
+        return True
+    finally:
+        await bot.session.close()
+
+
+async def send_attendance_sync_to_worker(
+    bot: Bot,
+    *,
+    worker_telegram_id: int,
+    attendance_date,
+    check_in_at,
+    check_out_at,
+    notes,
+    action: str,
+) -> None:
+    try:
+        await bot.send_message(
+            chat_id=worker_telegram_id,
+            text=build_attendance_sync_text(
+                attendance_date=attendance_date,
+                check_in_at=check_in_at,
+                check_out_at=check_out_at,
+                notes=notes,
+                action=action,
+            ),
+        )
+    except Exception:
+        logger.exception("Failed to send attendance sync notification to worker %s.", worker_telegram_id)
+
+
+async def send_attendance_sync_to_worker_via_configured_bot(
+    *,
+    worker_telegram_id: int,
+    attendance_date,
+    check_in_at,
+    check_out_at,
+    notes,
+    action: str,
+) -> bool:
+    settings = get_settings()
+    if not settings.bot_enabled:
+        return False
+
+    bot = Bot(
+        token=settings.bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        await send_attendance_sync_to_worker(
+            bot,
+            worker_telegram_id=worker_telegram_id,
+            attendance_date=attendance_date,
+            check_in_at=check_in_at,
+            check_out_at=check_out_at,
+            notes=notes,
+            action=action,
+        )
         return True
     finally:
         await bot.session.close()

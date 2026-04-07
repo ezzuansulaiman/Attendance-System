@@ -1,60 +1,120 @@
 {% extends "base.html" %}
+{% block title %}Sites | Attendance Command Center{% endblock %}
 {% block content %}
-<section class="page-header">
+<section class="page-header fade-in">
     <div>
         <p class="eyebrow">Site Management</p>
         <h2>{{ 'Edit Site' if site else 'Create Site' }}</h2>
-        <p>Set up operating sites, Telegram group mappings, and activation status for each location.</p>
+        <p>Define the operating locations that power worker assignment, Telegram routing, site filters, and cleaner reporting.</p>
+        <div class="hero-metrics" style="margin-top: 18px;">
+            <span class="hero-chip">Total Sites: {{ sites|length }}</span>
+            <span class="hero-chip">{{ 'Editing existing site' if site else 'Ready for new setup' }}</span>
+        </div>
     </div>
     <div class="page-header-aside">
-        <span class="hero-chip">Total Sites: {{ sites|length }}</span>
+        <div class="spotlight" style="background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.12); color: #fff;">
+            <h3 style="color: #fff;">Strong site setup helps everywhere</h3>
+            <p style="color: rgba(255, 255, 255, 0.78);">A clear site code and group mapping make attendance capture, leave review, and exports much easier to trust.</p>
+        </div>
     </div>
 </section>
 
-<section class="panel">
-    <div class="panel-header">
-        <div>
-            <h2>{{ 'Update Site Details' if site else 'Add New Site' }}</h2>
-            <p>{% if site %}Edit the current site configuration and save the updated values.{% else %}Create a new site for worker assignment and group routing.{% endif %}</p>
-        </div>
-    </div>
-    {% if error %}
-    <div class="error">{{ error }}</div>
-    {% endif %}
-    <form method="post" action="{{ request.url_for('sites_update', site_id=site.id) if site else request.url_for('sites_create') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-        <div class="form-grid">
-            <label>
-                Site Name
-                <input type="text" name="name" value="{{ site.name if site else '' }}" required>
-            </label>
-            <label>
-                Site Code
-                <input type="text" name="code" value="{{ site.code if site else '' }}">
-            </label>
-            <label>
-                Telegram Group ID
-                <input type="number" name="telegram_group_id" value="{{ site.telegram_group_id if site and site.telegram_group_id else '' }}">
-            </label>
-            <label class="inline-checkbox">
-                <input type="checkbox" name="is_active" {% if not site or site.is_active %}checked{% endif %}>
-                <span>Active site</span>
-            </label>
-        </div>
-        <div class="actions" style="margin-top: 16px;">
-            <button type="submit">{{ 'Update Site' if site else 'Create Site' }}</button>
-            {% if site %}
-            <a class="button secondary" href="{{ request.url_for('sites') }}">Cancel</a>
+<section class="section-grid fade-in delay-1">
+    <div class="stack">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>{{ 'Update Site Details' if site else 'Add New Site' }}</h2>
+                    <p>{% if site %}Refine the current site configuration and save updated routing details.{% else %}Create a new site for worker assignment and attendance filtering.{% endif %}</p>
+                </div>
+                <span class="mini-badge {% if site %}warning{% else %}success{% endif %}">{{ 'Editing site' if site else 'New site setup' }}</span>
+            </div>
+            {% if error %}
+            <div class="error">{{ error }}</div>
             {% endif %}
-        </div>
-    </form>
+            <form method="post" action="{{ request.url_for('sites_update', site_id=site.id) if site else request.url_for('sites_create') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                <div class="form-grid">
+                    <div class="field field-card">
+                        <label for="site-name">Site Name</label>
+                        <div class="label-hint">Use the location name admins will recognize in dashboards and reports.</div>
+                        <input id="site-name" type="text" name="name" value="{{ site.name if site else '' }}" required>
+                    </div>
+                    <div class="field field-card">
+                        <label for="site-code">Site Code</label>
+                        <div class="label-hint">Optional shorthand for reports, forms, or payroll references.</div>
+                        <input id="site-code" type="text" name="code" value="{{ site.code if site else '' }}">
+                    </div>
+                    <div class="field field-card">
+                        <label for="site-telegram-group">Telegram Group ID</label>
+                        <div class="label-hint">Used when the site needs dedicated group-based bot communication.</div>
+                        <input id="site-telegram-group" type="number" name="telegram_group_id" value="{{ site.telegram_group_id if site and site.telegram_group_id else '' }}">
+                    </div>
+                    <label class="inline-checkbox">
+                        <input type="checkbox" name="is_active" {% if not site or site.is_active %}checked{% endif %}>
+                        <span>
+                            <strong>Active site</strong><br>
+                            <span class="muted">Inactive sites remain in history while staying out of the live operating view.</span>
+                        </span>
+                    </label>
+                </div>
+                <div class="actions" style="margin-top: 16px;">
+                    <button type="submit">{{ 'Update Site' if site else 'Create Site' }}</button>
+                    {% if site %}
+                    <a class="button secondary" href="{{ request.url_for('sites') }}">Cancel</a>
+                    {% endif %}
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <aside class="stack">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Site Summary</h2>
+                    <p>Quick context for what's configured now.</p>
+                </div>
+            </div>
+            <div class="list">
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Total sites</div>
+                        <div class="list-item-meta">All saved operating locations in this workspace.</div>
+                    </div>
+                    <span class="status-pill neutral">{{ sites|length }}</span>
+                </div>
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Current mode</div>
+                        <div class="list-item-meta">{{ site.name if site else 'No site selected for editing.' }}</div>
+                    </div>
+                    <span class="status-pill {% if site %}warning{% else %}success{% endif %}">{{ 'Editing' if site else 'Create mode' }}</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Recommended Setup</h2>
+                    <p>Keep site data useful across the whole system.</p>
+                </div>
+            </div>
+            <ul class="bullet-list" style="margin-top: 0;">
+                <li>Use short, distinct site codes so exports stay readable.</li>
+                <li>Deactivate completed locations instead of overwriting history.</li>
+                <li>Keep Telegram group IDs current if the bot sends location-specific updates.</li>
+            </ul>
+        </section>
+    </aside>
 </section>
 
-<section class="panel">
+<section class="panel fade-in delay-2">
     <div class="panel-header">
         <div>
             <h2>Company Sites</h2>
-            <p>Manage site codes, Telegram routing, and active or inactive operating locations.</p>
+            <p>See every configured location, confirm routing details, and update status directly from the table.</p>
         </div>
     </div>
     <div class="table-wrap">
@@ -71,15 +131,18 @@
             <tbody>
                 {% for item in sites %}
                 <tr>
-                    <td>{{ item.name }}</td>
-                    <td>{{ item.code or '-' }}</td>
-                    <td>{{ item.telegram_group_id or '-' }}</td>
-                    <td>
+                    <td data-label="Name">
+                        <div class="cell-title">{{ item.name }}</div>
+                        <div class="cell-meta">Site #{{ item.id }}</div>
+                    </td>
+                    <td data-label="Code">{{ item.code or '-' }}</td>
+                    <td data-label="Telegram Group">{{ item.telegram_group_id or '-' }}</td>
+                    <td data-label="Status">
                         <span class="status-pill {% if item.is_active %}success{% else %}neutral{% endif %}">
                             {{ 'active' if item.is_active else 'inactive' }}
                         </span>
                     </td>
-                    <td>
+                    <td data-label="Action">
                         <div class="table-actions">
                             <a class="button secondary" href="{{ request.url_for('sites_edit', site_id=item.id) }}">Edit</a>
                             <form method="post" action="{{ request.url_for('sites_toggle_active', site_id=item.id) }}">
@@ -91,7 +154,10 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="5" class="empty-state">No sites have been created yet.</td>
+                    <td colspan="5" class="empty-state">
+                        <strong>No sites created yet</strong>
+                        Add the first site so workers can be assigned and filtered properly.
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

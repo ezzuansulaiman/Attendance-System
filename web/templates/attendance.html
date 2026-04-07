@@ -1,98 +1,179 @@
 {% extends "base.html" %}
+{% block title %}Attendance | Attendance Command Center{% endblock %}
 {% block content %}
-<section class="page-header">
+<section class="page-header fade-in">
     <div>
         <p class="eyebrow">Attendance Workspace</p>
         <h2>{{ 'Edit Attendance Record' if record else 'Attendance Editor' }}</h2>
-        <p>Capture, review, and export monthly attendance records in one working area.</p>
+        <p>Capture manual entries, review the current period, and export the same filtered data set for reporting without hopping between separate screens.</p>
+        <div class="hero-metrics" style="margin-top: 18px;">
+            <span class="hero-chip">Month: {{ selected_month }}/{{ selected_year }}</span>
+            <span class="hero-chip">{{ 'Filtered Site' if selected_site_id else 'All Sites' }}</span>
+            <span class="hero-chip">Records: {{ records|length }}</span>
+        </div>
     </div>
     <div class="page-header-aside">
-        <span class="hero-chip">Month: {{ selected_month }}/{{ selected_year }}</span>
-        {% if selected_site_id %}
-        <span class="hero-chip">Filtered Site</span>
-        {% else %}
-        <span class="hero-chip">All Sites</span>
-        {% endif %}
+        <div class="spotlight" style="background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.12); color: #fff;">
+            <h3 style="color: #fff;">Best when used monthly</h3>
+            <p style="color: rgba(255, 255, 255, 0.78);">Use the month filter first, then create or clean up records so the exported PDF and Excel always match what you reviewed.</p>
+        </div>
     </div>
 </section>
 
-<section class="panel">
+<section class="section-grid fade-in delay-1">
+    <div class="stack">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>{{ 'Update Record' if record else 'Create Attendance Record' }}</h2>
+                    <p>{% if record %}Adjust the selected record while keeping the current reporting context intact.{% else %}Add a manual attendance record for the selected worker and date.{% endif %}</p>
+                </div>
+                {% if record %}
+                <span class="mini-badge warning">Editing record #{{ record.id }}</span>
+                {% else %}
+                <span class="mini-badge success">New entry</span>
+                {% endif %}
+            </div>
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+            <form method="post" action="{{ request.url_for('attendance_update', record_id=record.id) if record else request.url_for('attendance_create') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                <input type="hidden" name="month" value="{{ selected_month }}">
+                <input type="hidden" name="year" value="{{ selected_year }}">
+                {% if selected_site_id %}
+                <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                {% endif %}
+                <div class="form-grid">
+                    <div class="field field-card">
+                        <label for="attendance-worker">Worker</label>
+                        <div class="label-hint">Only workers in the current site scope are listed here.</div>
+                        <select id="attendance-worker" name="worker_id" required>
+                            {% for worker_item in workers %}
+                            <option value="{{ worker_item.id }}" {% if form_data.get('worker_id') == worker_item.id or (not form_data and record and record.worker_id == worker_item.id) %}selected{% endif %}>
+                                {{ worker_item.full_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field field-card">
+                        <label for="attendance-date">Attendance Date</label>
+                        <div class="label-hint">Use the exact work date this record belongs to.</div>
+                        <input id="attendance-date" type="date" name="attendance_date" value="{{ form_data.get('attendance_date', record.attendance_date.isoformat() if record else '') }}" required>
+                    </div>
+                    <div class="field field-card">
+                        <label for="attendance-check-in">Check-In</label>
+                        <div class="label-hint">Leave blank if arrival has not been captured yet.</div>
+                        <input id="attendance-check-in" type="datetime-local" name="check_in_at" value="{{ form_data.get('check_in_at', record.check_in_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_in_at else '') }}">
+                    </div>
+                    <div class="field field-card">
+                        <label for="attendance-check-out">Check-Out</label>
+                        <div class="label-hint">Add the end-of-day time when the shift is complete.</div>
+                        <input id="attendance-check-out" type="datetime-local" name="check_out_at" value="{{ form_data.get('check_out_at', record.check_out_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_out_at else '') }}">
+                    </div>
+                </div>
+                <div class="field" style="margin-top: 14px;">
+                    <label for="attendance-notes">Notes</label>
+                    <div class="label-hint">Use this for clarifications such as late arrivals, manual correction reasons, or missing scans.</div>
+                    <textarea id="attendance-notes" name="notes" placeholder="Optional context for admins and payroll reviewers">{{ form_data.get('notes', record.notes if record else '') }}</textarea>
+                </div>
+                <div class="actions" style="margin-top: 16px;">
+                    <button type="submit">{{ 'Update Record' if record else 'Save Record' }}</button>
+                    {% if record %}
+                    <a class="button secondary" href="{{ request.url_for('attendance') }}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Cancel</a>
+                    {% endif %}
+                </div>
+            </form>
+        </section>
+
+        <section class="panel panel-muted">
+            <div class="toolbar">
+                <div>
+                    <h2>Monthly Attendance Records</h2>
+                    <p class="panel-subtitle">Filter the period once, then export a matching client-ready PDF or Excel submission.</p>
+                </div>
+                <form class="actions" method="get" action="{{ request.url_for('attendance') }}">
+                    <div class="field" style="min-width: 220px;">
+                        <label for="attendance-site-filter">Site</label>
+                        <select id="attendance-site-filter" name="site_id">
+                            <option value="">All Sites</option>
+                            {% for site in sites %}
+                            <option value="{{ site.id }}" {% if selected_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field" style="width: 110px;">
+                        <label for="attendance-month">Month</label>
+                        <input id="attendance-month" type="number" name="month" value="{{ selected_month }}" min="1" max="12">
+                    </div>
+                    <div class="field" style="width: 130px;">
+                        <label for="attendance-year">Year</label>
+                        <input id="attendance-year" type="number" name="year" value="{{ selected_year }}" min="2020" max="2100">
+                    </div>
+                    <button type="submit">Apply Filter</button>
+                    <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Submission PDF</a>
+                    <a class="button secondary" href="{{ request.url_for('monthly_report_excel') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Submission Excel</a>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <aside class="stack">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Workspace Tips</h2>
+                    <p>Small habits that reduce cleanup later.</p>
+                </div>
+            </div>
+            <ul class="bullet-list" style="margin-top: 0;">
+                <li>Keep the month and site filters aligned before exporting to avoid report mismatches.</li>
+                <li>Use notes when a manual entry differs from what the bot would normally capture.</li>
+                <li>Incomplete entries are easier to spot and resolve before month-end payroll review.</li>
+            </ul>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Record Summary</h2>
+                    <p>A quick quality check for the visible period.</p>
+                </div>
+            </div>
+            <div class="list">
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Visible records</div>
+                        <div class="list-item-meta">Entries loaded for the current month, year, and site scope.</div>
+                    </div>
+                    <span class="status-pill neutral">{{ records|length }}</span>
+                </div>
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Available workers</div>
+                        <div class="list-item-meta">Workers you can assign when creating a new record right now.</div>
+                    </div>
+                    <span class="status-pill neutral">{{ workers|length }}</span>
+                </div>
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Current scope</div>
+                        <div class="list-item-meta">{{ 'Filtered to one site' if selected_site_id else 'All sites are included' }}</div>
+                    </div>
+                    <span class="status-pill {% if selected_site_id %}warning{% else %}success{% endif %}">{{ 'Site filter' if selected_site_id else 'Global view' }}</span>
+                </div>
+            </div>
+        </section>
+    </aside>
+</section>
+
+<section class="panel fade-in delay-2">
     <div class="panel-header">
         <div>
-            <h2>{{ 'Update Record' if record else 'Create Attendance Record' }}</h2>
-            <p>{% if record %}Adjust the selected record and keep the current month filter intact.{% else %}Add a manual attendance record for the selected period.{% endif %}</p>
+            <h2>Attendance Ledger</h2>
+            <p>Review the current month's records, edit issues, or remove incorrect entries before export.</p>
         </div>
     </div>
-    {% if error %}
-    <div class="error">{{ error }}</div>
-    {% endif %}
-    <form method="post" action="{{ request.url_for('attendance_update', record_id=record.id) if record else request.url_for('attendance_create') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-        <input type="hidden" name="month" value="{{ selected_month }}">
-        <input type="hidden" name="year" value="{{ selected_year }}">
-        {% if selected_site_id %}
-        <input type="hidden" name="site_id" value="{{ selected_site_id }}">
-        {% endif %}
-        <div class="form-grid">
-            <label>
-                Worker
-                <select name="worker_id" required>
-                    {% for worker_item in workers %}
-                    <option value="{{ worker_item.id }}" {% if form_data.get('worker_id') == worker_item.id or (not form_data and record and record.worker_id == worker_item.id) %}selected{% endif %}>
-                        {{ worker_item.full_name }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                Attendance Date
-                <input type="date" name="attendance_date" value="{{ form_data.get('attendance_date', record.attendance_date.isoformat() if record else '') }}" required>
-            </label>
-            <label>
-                Check-In
-                <input type="datetime-local" name="check_in_at" value="{{ form_data.get('check_in_at', record.check_in_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_in_at else '') }}">
-            </label>
-            <label>
-                Check-Out
-                <input type="datetime-local" name="check_out_at" value="{{ form_data.get('check_out_at', record.check_out_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_out_at else '') }}">
-            </label>
-        </div>
-        <label style="margin-top: 14px;">
-            Notes
-            <textarea name="notes">{{ form_data.get('notes', record.notes if record else '') }}</textarea>
-        </label>
-        <div class="actions" style="margin-top: 16px;">
-            <button type="submit">{{ 'Update Record' if record else 'Save Record' }}</button>
-            {% if record %}
-            <a class="button secondary" href="{{ request.url_for('attendance') }}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Cancel</a>
-            {% endif %}
-        </div>
-    </form>
-</section>
-
-<section class="panel panel-muted">
-    <div class="toolbar">
-        <div>
-            <h2>Monthly Attendance Records</h2>
-            <p class="panel-subtitle">Filter the working period and export a client-ready PDF or Excel submission.</p>
-        </div>
-        <form class="actions" method="get" action="{{ request.url_for('attendance') }}">
-            <select name="site_id" style="min-width: 220px;">
-                <option value="">All Sites</option>
-                {% for site in sites %}
-                <option value="{{ site.id }}" {% if selected_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
-                {% endfor %}
-            </select>
-            <input type="number" name="month" value="{{ selected_month }}" min="1" max="12" style="width: 100px;">
-            <input type="number" name="year" value="{{ selected_year }}" min="2020" max="2100" style="width: 120px;">
-            <button type="submit">Apply Filter</button>
-            <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Submission PDF</a>
-            <a class="button secondary" href="{{ request.url_for('monthly_report_excel') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Submission Excel</a>
-        </form>
-    </div>
-</section>
-
-<section class="panel">
     <div class="table-wrap">
         <table>
             <thead>
@@ -109,16 +190,19 @@
             <tbody>
                 {% for item in records %}
                 <tr>
-                    <td>{{ item.worker.full_name }}</td>
-                    <td>{{ item.worker.site.name if item.worker.site else 'Unassigned' }}</td>
-                    <td>{{ item.attendance_date }}</td>
-                    <td>{{ item.check_in_at.strftime('%Y-%m-%d %H:%M') if item.check_in_at else '-' }}</td>
-                    <td>{{ item.check_out_at.strftime('%Y-%m-%d %H:%M') if item.check_out_at else '-' }}</td>
-                    <td>{{ item.notes or '-' }}</td>
-                    <td>
+                    <td data-label="Worker">
+                        <div class="cell-title">{{ item.worker.full_name }}</div>
+                        <div class="cell-meta">Record #{{ item.id }}</div>
+                    </td>
+                    <td data-label="Site">{{ item.worker.site.name if item.worker.site else 'Unassigned' }}</td>
+                    <td data-label="Date">{{ item.attendance_date }}</td>
+                    <td data-label="Check-In">{{ item.check_in_at.strftime('%Y-%m-%d %H:%M') if item.check_in_at else '-' }}</td>
+                    <td data-label="Check-Out">{{ item.check_out_at.strftime('%Y-%m-%d %H:%M') if item.check_out_at else '-' }}</td>
+                    <td data-label="Notes">{{ item.notes or 'No notes.' }}</td>
+                    <td data-label="Action">
                         <div class="table-actions">
                             <a class="button secondary" href="{{ request.url_for('attendance_edit', record_id=item.id) }}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Edit</a>
-                            <form method="post" action="{{ request.url_for('attendance_delete', record_id=item.id) }}">
+                            <form method="post" action="{{ request.url_for('attendance_delete', record_id=item.id) }}" onsubmit="return confirm('Delete this attendance record?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
                                 <input type="hidden" name="month" value="{{ selected_month }}">
                                 <input type="hidden" name="year" value="{{ selected_year }}">
@@ -132,7 +216,10 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" class="empty-state">No attendance records were found for this period.</td>
+                    <td colspan="7" class="empty-state">
+                        <strong>No attendance records found</strong>
+                        Try another site or period, or create the first record for this view.
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from datetime import date, datetime
 from typing import Optional
 
@@ -174,6 +175,31 @@ def build_today_status_text(
         f"Status: {status_line}\n"
         f"Rekod Masuk: {format_display_datetime(check_in_at) if check_in_at else '-'}\n"
         f"Rekod Keluar: {format_display_datetime(check_out_at) if check_out_at else '-'}"
+    )
+
+
+def build_attendance_sync_text(
+    *,
+    attendance_date: date,
+    check_in_at: Optional[datetime],
+    check_out_at: Optional[datetime],
+    notes: Optional[str],
+    action: str,
+) -> str:
+    action_map = {
+        "saved": "dikemaskini",
+        "deleted": "dipadam",
+    }
+    notes_line = ""
+    if notes:
+        notes_line = f"\nCatatan: {html.escape(notes)}"
+    return (
+        "<b>Rekod Kehadiran Dikemas Kini</b>\n"
+        f"Tarikh: {format_display_date(attendance_date)}\n"
+        f"Tindakan: {action_map.get(action, action)} dari dashboard admin web\n"
+        f"Rekod Masuk: {format_display_datetime(check_in_at) if check_in_at else '-'}\n"
+        f"Rekod Keluar: {format_display_datetime(check_out_at) if check_out_at else '-'}"
+        f"{notes_line}"
     )
 
 

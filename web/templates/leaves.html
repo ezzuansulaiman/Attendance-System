@@ -1,43 +1,81 @@
 {% extends "base.html" %}
+{% block title %}Leaves | Attendance Command Center{% endblock %}
 {% block content %}
-<section class="page-header">
+<section class="page-header fade-in">
     <div>
         <p class="eyebrow">Leave Review Desk</p>
         <h2>Leave Requests</h2>
-        <p>Review worker leave applications, filter by site, and approve or reject directly from the table.</p>
+        <p>Review incoming applications, narrow the queue by site, and process decisions from one cleaner approval workspace.</p>
+        <div class="hero-metrics" style="margin-top: 18px;">
+            <span class="hero-chip">Visible Requests: {{ leaves|length }}</span>
+            <span class="hero-chip">{{ 'Filtered Site' if selected_site_id else 'All Sites' }}</span>
+        </div>
     </div>
     <div class="page-header-aside">
-        <span class="hero-chip">Visible Requests: {{ leaves|length }}</span>
+        <div class="spotlight" style="background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.12); color: #fff;">
+            <h3 style="color: #fff;">Review faster, communicate sooner</h3>
+            <p style="color: rgba(255, 255, 255, 0.78);">Quick decisions reduce back-and-forth for workers and keep planning clearer at the site level.</p>
+        </div>
     </div>
 </section>
 
-<section class="panel">
+<section class="section-grid fade-in delay-1">
+    <div class="stack">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Review Queue</h2>
+                    <p>Use site filtering to focus on one location or keep the full company view for a broader approval pass.</p>
+                </div>
+            </div>
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+            <form class="actions" method="get" action="{{ request.url_for('leaves') }}">
+                <div class="field" style="min-width: 240px;">
+                    <label for="leaves-site-filter">Site scope</label>
+                    <select id="leaves-site-filter" name="site_id">
+                        <option value="">All Sites</option>
+                        {% for site in sites %}
+                        <option value="{{ site.id }}" {% if selected_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit">Apply Filter</button>
+            </form>
+        </section>
+    </div>
+
+    <aside class="stack">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Queue Tips</h2>
+                    <p>Make approvals easier to trust.</p>
+                </div>
+            </div>
+            <ul class="bullet-list" style="margin-top: 0;">
+                <li>Filter by site when one supervisor or project is the priority for the day.</li>
+                <li>Review the date span and reason together before deciding, especially for longer leave blocks.</li>
+                <li>Processed requests stay visible, so the table also works as a simple audit trail.</li>
+            </ul>
+        </section>
+    </aside>
+</section>
+
+<section class="panel fade-in delay-2">
     <div class="panel-header">
         <div>
-            <h2>Review Queue</h2>
-            <p>Filter by site to narrow down the current leave workload and process requests faster.</p>
+            <h2>Approval Table</h2>
+            <p>Every request in the current scope, including supporting context and direct actions for pending items.</p>
         </div>
     </div>
-    {% if error %}
-    <div class="error">{{ error }}</div>
-    {% endif %}
-    <form class="actions" method="get" action="{{ request.url_for('leaves') }}" style="margin-bottom: 16px;">
-        <select name="site_id" style="min-width: 240px;">
-            <option value="">All Sites</option>
-            {% for site in sites %}
-            <option value="{{ site.id }}" {% if selected_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit">Apply Filter</button>
-    </form>
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
-                    <th>ID</th>
+                    <th>Request</th>
                     <th>Worker</th>
-                    <th>Site</th>
-                    <th>Type</th>
                     <th>Dates</th>
                     <th>Reason</th>
                     <th>Media</th>
@@ -48,19 +86,20 @@
             <tbody>
                 {% for leave in leaves %}
                 <tr>
-                    <td>#{{ leave.id }}</td>
-                    <td>{{ leave.worker.full_name }}</td>
-                    <td>{{ leave.worker.site.name if leave.worker.site else 'Unassigned' }}</td>
-                    <td>{{ leave_label(leave.leave_type) }}</td>
-                    <td>{{ leave.start_date }} to {{ leave.end_date }}</td>
-                    <td>{{ leave.reason }}</td>
-                    <td>{{ 'Telegram file_id saved' if leave.telegram_file_id else '-' }}</td>
-                    <td>
+                    <td data-label="Request">
+                        <div class="cell-title">#{{ leave.id }} - {{ leave_label(leave.leave_type) }}</div>
+                        <div class="cell-meta">{{ leave.worker.site.name if leave.worker.site else 'Unassigned site' }}</div>
+                    </td>
+                    <td data-label="Worker">{{ leave.worker.full_name }}</td>
+                    <td data-label="Dates">{{ leave.start_date }} to {{ leave.end_date }}</td>
+                    <td data-label="Reason">{{ leave.reason }}</td>
+                    <td data-label="Media">{{ 'Telegram file_id saved' if leave.telegram_file_id else '-' }}</td>
+                    <td data-label="Status">
                         <span class="status-pill {% if leave.status == 'approved' %}success{% elif leave.status == 'pending' %}warning{% elif leave.status == 'rejected' %}danger{% else %}neutral{% endif %}">
                             {{ leave.status }}
                         </span>
                     </td>
-                    <td>
+                    <td data-label="Action">
                         <div class="table-actions">
                             {% if leave.status == 'pending' %}
                             <form method="post" action="{{ request.url_for('leaves_approve', leave_id=leave.id) }}">
@@ -85,7 +124,10 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="9" class="empty-state">No leave requests are available right now.</td>
+                    <td colspan="7" class="empty-state">
+                        <strong>No leave requests right now</strong>
+                        When workers submit leave, the review queue will appear here automatically.
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

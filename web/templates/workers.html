@@ -1,75 +1,144 @@
 {% extends "base.html" %}
+{% block title %}Workers | Attendance Command Center{% endblock %}
 {% block content %}
-<section class="page-header">
+<section class="page-header fade-in">
     <div>
         <p class="eyebrow">People Directory</p>
         <h2>{{ 'Edit Worker' if worker else 'Register Worker' }}</h2>
-        <p>Maintain worker records, Telegram IDs, site assignments, and activation status from one panel.</p>
+        <p>Manage worker identity, Telegram linkage, project assignment, and active status from one cleaner roster workspace.</p>
+        <div class="hero-metrics" style="margin-top: 18px;">
+            <span class="hero-chip">Total Records: {{ workers|length }}</span>
+            <span class="hero-chip">Sites Available: {{ sites|length }}</span>
+        </div>
     </div>
     <div class="page-header-aside">
-        <span class="hero-chip">Total Records: {{ workers|length }}</span>
+        <div class="spotlight" style="background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.12); color: #fff;">
+            <h3 style="color: #fff;">Roster hygiene matters</h3>
+            <p style="color: rgba(255, 255, 255, 0.78);">Keeping Telegram IDs and site assignments correct makes attendance capture and leave routing much more reliable.</p>
+        </div>
     </div>
 </section>
 
-<section class="panel">
-    <div class="panel-header">
-        <div>
-            <h2>{{ 'Update Worker Profile' if worker else 'Create Worker Profile' }}</h2>
-            <p>{% if worker %}Edit the selected worker and save the updated assignment details.{% else %}Register a new worker for attendance and leave tracking.{% endif %}</p>
-        </div>
-    </div>
-    {% if error %}
-    <div class="error">{{ error }}</div>
-    {% endif %}
-    <form method="post" action="{{ request.url_for('workers_update', worker_id=worker.id) if worker else request.url_for('workers_create') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-        <div class="form-grid">
-            <label>
-                Full Name
-                <input type="text" name="full_name" value="{{ worker.full_name if worker else '' }}" required>
-            </label>
-            <label>
-                Telegram User ID
-                <input type="number" name="telegram_user_id" value="{{ worker.telegram_user_id if worker else '' }}" required>
-            </label>
-            <label>
-                No IC
-                <input type="text" name="ic_number" value="{{ worker.ic_number if worker else '' }}">
-            </label>
-            <label>
-                Employee Code
-                <input type="text" name="employee_code" value="{{ worker.employee_code if worker else '' }}">
-            </label>
-            <label>
-                Site
-                <select name="site_id">
-                    <option value="">Unassigned</option>
-                    {% for site_item in sites %}
-                    <option value="{{ site_item.id }}" {% if worker and worker.site_id == site_item.id %}selected{% endif %}>
-                        {{ site_item.name }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label class="inline-checkbox">
-                <input type="checkbox" name="is_active" {% if not worker or worker.is_active %}checked{% endif %}>
-                <span>Active worker</span>
-            </label>
-        </div>
-        <div class="actions" style="margin-top: 16px;">
-            <button type="submit">{{ 'Update Worker' if worker else 'Create Worker' }}</button>
-            {% if worker %}
-            <a class="button secondary" href="{{ request.url_for('workers') }}">Cancel</a>
+<section class="section-grid fade-in delay-1">
+    <div class="stack">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>{{ 'Update Worker Profile' if worker else 'Create Worker Profile' }}</h2>
+                    <p>{% if worker %}Edit the selected worker and keep the roster accurate.{% else %}Add a new worker so they can participate in attendance and leave workflows.{% endif %}</p>
+                </div>
+                <span class="mini-badge {% if worker %}warning{% else %}success{% endif %}">{{ 'Editing existing profile' if worker else 'New worker setup' }}</span>
+            </div>
+            {% if error %}
+            <div class="error">{{ error }}</div>
             {% endif %}
-        </div>
-    </form>
+            <form method="post" action="{{ request.url_for('workers_update', worker_id=worker.id) if worker else request.url_for('workers_create') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                <div class="form-grid">
+                    <div class="field field-card">
+                        <label for="worker-full-name">Full Name</label>
+                        <div class="label-hint">Use the display name admins will recognize in attendance and leave tables.</div>
+                        <input id="worker-full-name" type="text" name="full_name" value="{{ worker.full_name if worker else '' }}" required>
+                    </div>
+                    <div class="field field-card">
+                        <label for="worker-telegram-id">Telegram User ID</label>
+                        <div class="label-hint">Required so the bot can tie requests and attendance actions to the correct person.</div>
+                        <input id="worker-telegram-id" type="number" name="telegram_user_id" value="{{ worker.telegram_user_id if worker else '' }}" required>
+                    </div>
+                    <div class="field field-card">
+                        <label for="worker-ic-number">No IC</label>
+                        <div class="label-hint">Optional identification reference for HR or payroll.</div>
+                        <input id="worker-ic-number" type="text" name="ic_number" value="{{ worker.ic_number if worker else '' }}">
+                    </div>
+                    <div class="field field-card">
+                        <label for="worker-employee-code">Employee Code</label>
+                        <div class="label-hint">Useful for matching external payroll or internal records.</div>
+                        <input id="worker-employee-code" type="text" name="employee_code" value="{{ worker.employee_code if worker else '' }}">
+                    </div>
+                    <div class="field field-card">
+                        <label for="worker-site">Site</label>
+                        <div class="label-hint">Assign a default site so attendance and leave filters stay meaningful.</div>
+                        <select id="worker-site" name="site_id">
+                            <option value="">Unassigned</option>
+                            {% for site_item in sites %}
+                            <option value="{{ site_item.id }}" {% if worker and worker.site_id == site_item.id %}selected{% endif %}>
+                                {{ site_item.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <label class="inline-checkbox">
+                        <input type="checkbox" name="is_active" {% if not worker or worker.is_active %}checked{% endif %}>
+                        <span>
+                            <strong>Active worker</strong><br>
+                            <span class="muted">Inactive workers stay in history but won't be treated as part of the live roster.</span>
+                        </span>
+                    </label>
+                </div>
+                <div class="actions" style="margin-top: 16px;">
+                    <button type="submit">{{ 'Update Worker' if worker else 'Create Worker' }}</button>
+                    {% if worker %}
+                    <a class="button secondary" href="{{ request.url_for('workers') }}">Cancel</a>
+                    {% endif %}
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <aside class="stack">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Roster Summary</h2>
+                    <p>Quick insight into the current worker setup.</p>
+                </div>
+            </div>
+            <div class="list">
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Total workers</div>
+                        <div class="list-item-meta">All worker profiles currently in the system.</div>
+                    </div>
+                    <span class="status-pill neutral">{{ workers|length }}</span>
+                </div>
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Editing mode</div>
+                        <div class="list-item-meta">{{ worker.full_name if worker else 'No worker selected right now.' }}</div>
+                    </div>
+                    <span class="status-pill {% if worker %}warning{% else %}success{% endif %}">{{ 'Editing' if worker else 'Create mode' }}</span>
+                </div>
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Site pool</div>
+                        <div class="list-item-meta">Active and inactive sites available for assignment.</div>
+                    </div>
+                    <span class="status-pill neutral">{{ sites|length }}</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Good Admin Defaults</h2>
+                    <p>Simple patterns that improve the rest of the workflow.</p>
+                </div>
+            </div>
+            <ul class="bullet-list" style="margin-top: 0;">
+                <li>Use consistent naming so workers are easy to find in reports and leave decisions.</li>
+                <li>Deactivate instead of deleting when someone leaves, so old records remain traceable.</li>
+                <li>Set the site at onboarding time to keep filters and dashboards accurate from day one.</li>
+            </ul>
+        </section>
+    </aside>
 </section>
 
-<section class="panel">
+<section class="panel fade-in delay-2">
     <div class="panel-header">
         <div>
             <h2>Registered Workers</h2>
-            <p>Review active assignments, edit worker details, or toggle worker availability.</p>
+            <p>Review assignments, edit profile details, or toggle worker availability without leaving the roster table.</p>
         </div>
     </div>
     <div class="table-wrap">
@@ -78,8 +147,7 @@
                 <tr>
                     <th>Name</th>
                     <th>Telegram ID</th>
-                    <th>No IC</th>
-                    <th>Code</th>
+                    <th>Identity</th>
                     <th>Site</th>
                     <th>Status</th>
                     <th>Action</th>
@@ -88,17 +156,22 @@
             <tbody>
                 {% for item in workers %}
                 <tr>
-                    <td>{{ item.full_name }}</td>
-                    <td>{{ item.telegram_user_id }}</td>
-                    <td>{{ item.ic_number or '-' }}</td>
-                    <td>{{ item.employee_code or '-' }}</td>
-                    <td>{{ item.site.name if item.site else 'Unassigned' }}</td>
-                    <td>
+                    <td data-label="Name">
+                        <div class="cell-title">{{ item.full_name }}</div>
+                        <div class="cell-meta">{{ item.employee_code or 'No employee code' }}</div>
+                    </td>
+                    <td data-label="Telegram ID">{{ item.telegram_user_id }}</td>
+                    <td data-label="Identity">
+                        <div>{{ item.ic_number or '-' }}</div>
+                        <div class="cell-meta">IC / HR reference</div>
+                    </td>
+                    <td data-label="Site">{{ item.site.name if item.site else 'Unassigned' }}</td>
+                    <td data-label="Status">
                         <span class="status-pill {% if item.is_active %}success{% else %}neutral{% endif %}">
                             {{ 'active' if item.is_active else 'inactive' }}
                         </span>
                     </td>
-                    <td>
+                    <td data-label="Action">
                         <div class="table-actions">
                             <a class="button secondary" href="{{ request.url_for('workers_edit', worker_id=item.id) }}">Edit</a>
                             <form method="post" action="{{ request.url_for('workers_toggle_active', worker_id=item.id) }}">
@@ -110,7 +183,10 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" class="empty-state">No workers have been registered yet.</td>
+                    <td colspan="6" class="empty-state">
+                        <strong>No workers registered yet</strong>
+                        Create the first worker profile to begin attendance and leave tracking.
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -1,40 +1,52 @@
 {% extends "base.html" %}
+{% block title %}Login | Attendance Command Center{% endblock %}
 {% block content %}
-<section class="login-shell">
-    <div class="page-header" style="margin-bottom: 18px;">
-        <div>
-            <p class="eyebrow">Secure Access</p>
-            <h2>Admin Login</h2>
-            <p>Sign in to manage attendance records, workers, leave approvals, and monthly reporting.</p>
-        </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-header">
+<section class="login-shell fade-in">
+    <div class="login-grid">
+        <div class="page-header" style="min-height: 100%;">
             <div>
-                <h2>Welcome Back</h2>
-                <p>Use your admin credentials to continue into the operations workspace.</p>
+                <span class="kicker">Secure Access</span>
+                <p class="eyebrow" style="margin-top: 16px;">Operations Workspace</p>
+                <h2>Admin Login</h2>
+                <p>Sign in to manage attendance, leave approvals, worker records, site routing, and monthly exports from one operations dashboard.</p>
+                <ul class="bullet-list" style="margin-top: 22px;">
+                    <li>Centralize attendance correction and report exports in one place.</li>
+                    <li>Review leave decisions quickly without losing site context.</li>
+                    <li>Keep worker and site data aligned with the bot workflow.</li>
+                </ul>
             </div>
         </div>
-        {% if error %}
-        <div class="error">{{ error }}</div>
-        {% endif %}
-        <form method="post" action="{{ request.url_for('login_post') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-            <div class="form-grid" style="grid-template-columns: 1fr;">
-                <label>
-                    Username
-                    <input type="text" name="username" required>
-                </label>
-                <label>
-                    Password
-                    <input type="password" name="password" required>
-                </label>
+
+        <div class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Welcome Back</h2>
+                    <p>Use your admin credentials to continue into the operations workspace.</p>
+                </div>
+                <span class="mini-badge success">Protected area</span>
             </div>
-            <div class="actions" style="margin-top: 16px;">
-                <button type="submit" class="block">Login</button>
-            </div>
-        </form>
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+            <form method="post" action="{{ request.url_for('login_post') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                <div class="stack-tight">
+                    <div class="field">
+                        <label for="login-username">Username</label>
+                        <div class="label-hint">Use the administrator account configured for this deployment.</div>
+                        <input id="login-username" type="text" name="username" required>
+                    </div>
+                    <div class="field">
+                        <label for="login-password">Password</label>
+                        <div class="label-hint">Credentials are required before any worker, site, or leave data can be viewed.</div>
+                        <input id="login-password" type="password" name="password" required>
+                    </div>
+                </div>
+                <div class="actions" style="margin-top: 18px;">
+                    <button type="submit" class="block">Login</button>
+                </div>
+            </form>
+        </div>
     </div>
 </section>
 {% endblock %}

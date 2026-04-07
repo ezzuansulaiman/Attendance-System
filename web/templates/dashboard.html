@@ -1,81 +1,140 @@
 {% extends "base.html" %}
+{% block title %}Dashboard | Attendance Command Center{% endblock %}
 {% block content %}
-<section class="page-header">
+<section class="page-header fade-in">
     <div>
         <p class="eyebrow">Daily Overview</p>
         <h2>Admin Dashboard</h2>
-        <p>Monitor attendance activity, filter by site, and jump into the most common admin actions from one place.</p>
+        <p>Track the health of today's workforce, review the latest movement across sites, and jump into the actions that keep payroll and approvals moving.</p>
+        <div class="hero-metrics" style="margin-top: 18px;">
+            <span class="hero-chip">Today: {{ today }}</span>
+            <span class="hero-chip">Active Workforce: {{ summary.total_workers }}</span>
+            <span class="hero-chip">Pending Leaves: {{ summary.pending_leaves }}</span>
+        </div>
     </div>
     <div class="page-header-aside">
-        <span class="hero-chip">Today: {{ today }}</span>
-        <span class="hero-chip">Pending Leaves: {{ summary.pending_leaves }}</span>
-    </div>
-</section>
-
-<section class="panel panel-muted">
-    <div class="toolbar">
-        <div>
-            <h2>Workspace Filters</h2>
-            <p class="panel-subtitle">Switch between all sites or focus on one project location.</p>
-        </div>
-        <form class="actions" method="get" action="{{ request.url_for('dashboard') }}">
-            <select name="site_id" style="min-width: 240px;">
-                <option value="">All Sites</option>
-                {% for site in sites %}
-                <option value="{{ site.id }}" {% if selected_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
-                {% endfor %}
-            </select>
-            <button type="submit">Apply Filter</button>
-            <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Current PDF</a>
-            <a class="button secondary" href="{{ request.url_for('monthly_report_excel') }}?year={{ current_year() }}&month={{ current_month() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Current Excel</a>
-        </form>
-    </div>
-</section>
-
-<section class="panel">
-    <div class="panel-header">
-        <div>
-            <h2>Quick Actions</h2>
-            <p>Open the main admin pages and continue with the same working context where relevant.</p>
-        </div>
-        <div class="actions">
-            <a class="button secondary" href="{{ request.url_for('workers') }}">Manage Workers</a>
-            <a class="button secondary" href="{{ request.url_for('sites') }}">Manage Sites</a>
-            <a class="button secondary" href="{{ request.url_for('attendance') }}?month={{ current_month() }}&year={{ current_year() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Manage Attendance</a>
-            <a class="button secondary" href="{{ request.url_for('leaves') }}{% if selected_site_id %}?site_id={{ selected_site_id }}{% endif %}">Manage Leaves</a>
+        <div class="spotlight" style="background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.12); color: #fff;">
+            <h3 style="color: #fff;">Today at a glance</h3>
+            <p style="color: rgba(255, 255, 255, 0.78);">Use the dashboard as a triage view: filter by site, export current files, then go deeper only where follow-up is needed.</p>
         </div>
     </div>
 </section>
 
-<section class="grid cards">
-    <article class="card">
-        <span class="badge">Active Workforce</span>
-        <div class="metric">{{ summary.total_workers }}</div>
-        <div class="metric-note">Total active workers in the selected view.</div>
-    </article>
-    <article class="card">
-        <span class="badge">Checked In</span>
-        <div class="metric">{{ summary.checked_in }}</div>
-        <div class="metric-note">Workers who have recorded their arrival today.</div>
-    </article>
-    <article class="card">
-        <span class="badge">Checked Out</span>
-        <div class="metric">{{ summary.checked_out }}</div>
-        <div class="metric-note">Workers who completed today’s attendance cycle.</div>
-    </article>
-    <article class="card">
-        <span class="badge">Pending Review</span>
-        <div class="metric">{{ summary.pending_leaves }}</div>
-        <div class="metric-note">Leave applications still waiting for action.</div>
-    </article>
+<section class="section-grid fade-in delay-1">
+    <div class="stack">
+        <section class="panel panel-muted">
+            <div class="toolbar">
+                <div>
+                    <h2>Workspace Filters</h2>
+                    <p class="panel-subtitle">Switch between all operations or focus on one site before reviewing attendance and leave activity.</p>
+                </div>
+                <form class="actions" method="get" action="{{ request.url_for('dashboard') }}">
+                    <div class="field" style="min-width: 240px;">
+                        <label for="dashboard-site-filter">Site scope</label>
+                        <select id="dashboard-site-filter" name="site_id">
+                            <option value="">All Sites</option>
+                            {% for site in sites %}
+                            <option value="{{ site.id }}" {% if selected_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit">Apply Filter</button>
+                    <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Current PDF</a>
+                    <a class="button secondary" href="{{ request.url_for('monthly_report_excel') }}?year={{ current_year() }}&month={{ current_month() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Current Excel</a>
+                </form>
+            </div>
+        </section>
+
+        <section class="grid cards">
+            <article class="card">
+                <span class="badge">Active Workforce</span>
+                <div class="metric">{{ summary.total_workers }}</div>
+                <div class="metric-label">Workers in the current view</div>
+                <div class="metric-note">This is the total roster currently visible after applying the active site scope.</div>
+            </article>
+            <article class="card">
+                <span class="badge">Checked In</span>
+                <div class="metric">{{ summary.checked_in }}</div>
+                <div class="metric-label">Recorded arrivals today</div>
+                <div class="metric-note">Workers who have completed the first step of the attendance cycle for today.</div>
+            </article>
+            <article class="card">
+                <span class="badge">Checked Out</span>
+                <div class="metric">{{ summary.checked_out }}</div>
+                <div class="metric-label">Completed attendance cycle</div>
+                <div class="metric-note">Workers with both ends of the day captured and ready for reporting.</div>
+            </article>
+            <article class="card">
+                <span class="badge">Pending Review</span>
+                <div class="metric">{{ summary.pending_leaves }}</div>
+                <div class="metric-label">Leave requests awaiting action</div>
+                <div class="metric-note">Requests that still need an approval decision before the worker can be updated.</div>
+            </article>
+        </section>
+    </div>
+
+    <aside class="stack">
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Quick Actions</h2>
+                    <p>Open the most common admin tasks without losing context.</p>
+                </div>
+            </div>
+            <div class="list">
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Manage Attendance</div>
+                        <div class="list-item-meta">Review the current month, add records, and export submissions.</div>
+                    </div>
+                    <a class="button secondary" href="{{ request.url_for('attendance') }}?month={{ current_month() }}&year={{ current_year() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Open</a>
+                </div>
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Manage Leaves</div>
+                        <div class="list-item-meta">Process pending requests and keep workers informed quickly.</div>
+                    </div>
+                    <a class="button secondary" href="{{ request.url_for('leaves') }}{% if selected_site_id %}?site_id={{ selected_site_id }}{% endif %}">Open</a>
+                </div>
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Manage Workers</div>
+                        <div class="list-item-meta">Keep Telegram IDs, site assignments, and status up to date.</div>
+                    </div>
+                    <a class="button secondary" href="{{ request.url_for('workers') }}">Open</a>
+                </div>
+                <div class="list-item">
+                    <div>
+                        <div class="list-item-title">Manage Sites</div>
+                        <div class="list-item-meta">Adjust active locations and group routing details.</div>
+                    </div>
+                    <a class="button secondary" href="{{ request.url_for('sites') }}">Open</a>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Suggested Workflow</h2>
+                    <p>For a smoother daily admin pass.</p>
+                </div>
+            </div>
+            <ul class="bullet-list" style="margin-top: 0;">
+                <li>Start with the site filter so attendance, leaves, and exports stay aligned.</li>
+                <li>Review incomplete attendance entries before finalizing month-end reports.</li>
+                <li>Clear pending leave approvals early so schedule changes reach workers sooner.</li>
+            </ul>
+        </section>
+    </aside>
 </section>
 
-<section class="two-up">
+<section class="two-up fade-in delay-2">
     <div class="panel">
         <div class="panel-header">
             <div>
                 <h2>Recent Attendance Updates</h2>
-                <p>Latest check-in and check-out activity from the selected scope.</p>
+                <p>Latest arrivals and departures in the current dashboard scope.</p>
             </div>
             <a class="button secondary" href="{{ request.url_for('attendance') }}?month={{ current_month() }}&year={{ current_year() }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Open Attendance</a>
         </div>
@@ -86,8 +145,7 @@
                         <th>Worker</th>
                         <th>Site</th>
                         <th>Date</th>
-                        <th>Check-In</th>
-                        <th>Check-Out</th>
+                        <th>Progress</th>
                         <th>Notes</th>
                         <th>Action</th>
                     </tr>
@@ -95,19 +153,34 @@
                 <tbody>
                     {% for record in recent_records %}
                     <tr>
-                        <td>{{ record.worker.full_name }}</td>
-                        <td>{{ record.worker.site.name if record.worker.site else 'Unassigned' }}</td>
-                        <td>{{ record.attendance_date }}</td>
-                        <td>{{ record.check_in_at.strftime('%Y-%m-%d %H:%M') if record.check_in_at else '-' }}</td>
-                        <td>{{ record.check_out_at.strftime('%Y-%m-%d %H:%M') if record.check_out_at else '-' }}</td>
-                        <td>{{ record.notes or '-' }}</td>
-                        <td>
+                        <td data-label="Worker">
+                            <div class="cell-title">{{ record.worker.full_name }}</div>
+                            <div class="cell-meta">Record #{{ record.id }}</div>
+                        </td>
+                        <td data-label="Site">{{ record.worker.site.name if record.worker.site else 'Unassigned' }}</td>
+                        <td data-label="Date">{{ record.attendance_date }}</td>
+                        <td data-label="Progress">
+                            {% if record.check_in_at and record.check_out_at %}
+                            <span class="status-pill success">Checked in and out</span>
+                            <div class="cell-meta">{{ record.check_in_at.strftime('%Y-%m-%d %H:%M') }} to {{ record.check_out_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                            {% elif record.check_in_at %}
+                            <span class="status-pill warning">Checked in only</span>
+                            <div class="cell-meta">{{ record.check_in_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                            {% else %}
+                            <span class="status-pill neutral">No time logged</span>
+                            {% endif %}
+                        </td>
+                        <td data-label="Notes">{{ record.notes or 'No notes added.' }}</td>
+                        <td data-label="Action">
                             <a class="button secondary" href="{{ request.url_for('attendance_edit', record_id=record.id) }}?month={{ record.attendance_date.month }}&year={{ record.attendance_date.year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Edit Record</a>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" class="empty-state">No attendance records have been captured yet.</td>
+                        <td colspan="6" class="empty-state">
+                            <strong>No attendance records yet</strong>
+                            Activity will appear here as soon as workers start checking in.
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -119,7 +192,7 @@
         <div class="panel-header">
             <div>
                 <h2>Latest Leave Requests</h2>
-                <p>Approve pending requests directly or open the full leave workspace.</p>
+                <p>Approve from the dashboard when you want the fastest possible review pass.</p>
             </div>
             <a class="button secondary" href="{{ request.url_for('leaves') }}{% if selected_site_id %}?site_id={{ selected_site_id }}{% endif %}">Open Leaves</a>
         </div>
@@ -127,10 +200,8 @@
             <table>
                 <thead>
                     <tr>
-                        <th>ID</th>
+                        <th>Request</th>
                         <th>Worker</th>
-                        <th>Site</th>
-                        <th>Type</th>
                         <th>Dates</th>
                         <th>Status</th>
                         <th>Action</th>
@@ -139,17 +210,16 @@
                 <tbody>
                     {% for leave in leave_requests %}
                     <tr>
-                        <td>#{{ leave.id }}</td>
-                        <td>{{ leave.worker.full_name }}</td>
-                        <td>{{ leave.worker.site.name if leave.worker.site else 'Unassigned' }}</td>
-                        <td>{{ leave_label(leave.leave_type) }}</td>
-                        <td>{{ leave.start_date }} to {{ leave.end_date }}</td>
-                        <td>
-                            <span class="status-pill {% if leave.status == 'approved' %}success{% elif leave.status == 'pending' %}warning{% elif leave.status == 'rejected' %}danger{% else %}neutral{% endif %}">
-                                {{ leave.status }}
-                            </span>
+                        <td data-label="Request">
+                            <div class="cell-title">#{{ leave.id }} - {{ leave_label(leave.leave_type) }}</div>
+                            <div class="cell-meta">{{ leave.worker.site.name if leave.worker.site else 'Unassigned site' }}</div>
                         </td>
-                        <td>
+                        <td data-label="Worker">{{ leave.worker.full_name }}</td>
+                        <td data-label="Dates">{{ leave.start_date }} to {{ leave.end_date }}</td>
+                        <td data-label="Status">
+                            <span class="status-pill {% if leave.status == 'approved' %}success{% elif leave.status == 'pending' %}warning{% elif leave.status == 'rejected' %}danger{% else %}neutral{% endif %}">{{ leave.status }}</span>
+                        </td>
+                        <td data-label="Action">
                             <div class="table-actions">
                                 {% if leave.status == 'pending' %}
                                 <form method="post" action="{{ request.url_for('leaves_approve', leave_id=leave.id) }}">
@@ -176,7 +246,10 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" class="empty-state">No leave requests are available yet.</td>
+                        <td colspan="5" class="empty-state">
+                            <strong>No leave requests available</strong>
+                            New submissions will show up here automatically.
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
