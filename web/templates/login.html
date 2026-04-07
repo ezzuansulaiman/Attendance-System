@@ -1,26 +1,40 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="panel" style="max-width: 460px; margin: 8vh auto 0;">
-    <h2>Admin Login</h2>
-    <p>Sign in to manage attendance records, workers, leave approvals, and reports.</p>
-    {% if error %}
-    <div class="error">{{ error }}</div>
-    {% endif %}
-    <form method="post" action="{{ request.url_for('login_post') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-        <div class="form-grid">
-            <label>
-                Username
-                <input type="text" name="username" required>
-            </label>
-            <label>
-                Password
-                <input type="password" name="password" required>
-            </label>
+<section class="login-shell">
+    <div class="page-header" style="margin-bottom: 18px;">
+        <div>
+            <p class="eyebrow">Secure Access</p>
+            <h2>Admin Login</h2>
+            <p>Sign in to manage attendance records, workers, leave approvals, and monthly reporting.</p>
         </div>
-        <div class="actions" style="margin-top: 14px;">
-            <button type="submit">Login</button>
+    </div>
+
+    <div class="panel">
+        <div class="panel-header">
+            <div>
+                <h2>Welcome Back</h2>
+                <p>Use your admin credentials to continue into the operations workspace.</p>
+            </div>
         </div>
-    </form>
-</div>
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+        <form method="post" action="{{ request.url_for('login_post') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+            <div class="form-grid" style="grid-template-columns: 1fr;">
+                <label>
+                    Username
+                    <input type="text" name="username" required>
+                </label>
+                <label>
+                    Password
+                    <input type="password" name="password" required>
+                </label>
+            </div>
+            <div class="actions" style="margin-top: 16px;">
+                <button type="submit" class="block">Login</button>
+            </div>
+        </form>
+    </div>
+</section>
 {% endblock %}

@@ -1,7 +1,23 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="panel">
-    <h2>{{ 'Edit Worker' if worker else 'Register Worker' }}</h2>
+<section class="page-header">
+    <div>
+        <p class="eyebrow">People Directory</p>
+        <h2>{{ 'Edit Worker' if worker else 'Register Worker' }}</h2>
+        <p>Maintain worker records, Telegram IDs, site assignments, and activation status from one panel.</p>
+    </div>
+    <div class="page-header-aside">
+        <span class="hero-chip">Total Records: {{ workers|length }}</span>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <div>
+            <h2>{{ 'Update Worker Profile' if worker else 'Create Worker Profile' }}</h2>
+            <p>{% if worker %}Edit the selected worker and save the updated assignment details.{% else %}Register a new worker for attendance and leave tracking.{% endif %}</p>
+        </div>
+    </div>
     {% if error %}
     <div class="error">{{ error }}</div>
     {% endif %}
@@ -35,22 +51,27 @@
                     {% endfor %}
                 </select>
             </label>
-            <label style="display:flex; align-items:center; gap:10px; padding-top:28px;">
+            <label class="inline-checkbox">
                 <input type="checkbox" name="is_active" {% if not worker or worker.is_active %}checked{% endif %}>
-                Active worker
+                <span>Active worker</span>
             </label>
         </div>
-        <div class="actions" style="margin-top: 14px;">
+        <div class="actions" style="margin-top: 16px;">
             <button type="submit">{{ 'Update Worker' if worker else 'Create Worker' }}</button>
             {% if worker %}
             <a class="button secondary" href="{{ request.url_for('workers') }}">Cancel</a>
             {% endif %}
         </div>
     </form>
-</div>
+</section>
 
-<div class="panel" style="margin-top: 18px;">
-    <h2>Registered Workers</h2>
+<section class="panel">
+    <div class="panel-header">
+        <div>
+            <h2>Registered Workers</h2>
+            <p>Review active assignments, edit worker details, or toggle worker availability.</p>
+        </div>
+    </div>
     <div class="table-wrap">
         <table>
             <thead>
@@ -61,7 +82,7 @@
                     <th>Code</th>
                     <th>Site</th>
                     <th>Status</th>
-                    <th></th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -72,20 +93,28 @@
                     <td>{{ item.ic_number or '-' }}</td>
                     <td>{{ item.employee_code or '-' }}</td>
                     <td>{{ item.site.name if item.site else 'Unassigned' }}</td>
-                    <td><span class="badge">{{ 'active' if item.is_active else 'inactive' }}</span></td>
-                    <td class="actions">
-                        <a class="button secondary" href="{{ request.url_for('workers_edit', worker_id=item.id) }}">Edit</a>
-                        <form method="post" action="{{ request.url_for('workers_toggle_active', worker_id=item.id) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-                            <button class="button secondary" type="submit">{{ 'Deactivate' if item.is_active else 'Activate' }}</button>
-                        </form>
+                    <td>
+                        <span class="status-pill {% if item.is_active %}success{% else %}neutral{% endif %}">
+                            {{ 'active' if item.is_active else 'inactive' }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="table-actions">
+                            <a class="button secondary" href="{{ request.url_for('workers_edit', worker_id=item.id) }}">Edit</a>
+                            <form method="post" action="{{ request.url_for('workers_toggle_active', worker_id=item.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                                <button class="secondary" type="submit">{{ 'Deactivate' if item.is_active else 'Activate' }}</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="7">No workers registered yet.</td></tr>
+                <tr>
+                    <td colspan="7" class="empty-state">No workers have been registered yet.</td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-</div>
+</section>
 {% endblock %}

@@ -1,7 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="panel">
-    <h2>{{ 'Edit Attendance Record' if record else 'Attendance Editor' }}</h2>
+<section class="page-header">
+    <div>
+        <p class="eyebrow">Attendance Workspace</p>
+        <h2>{{ 'Edit Attendance Record' if record else 'Attendance Editor' }}</h2>
+        <p>Capture, review, and export monthly attendance records in one working area.</p>
+    </div>
+    <div class="page-header-aside">
+        <span class="hero-chip">Month: {{ selected_month }}/{{ selected_year }}</span>
+        {% if selected_site_id %}
+        <span class="hero-chip">Filtered Site</span>
+        {% else %}
+        <span class="hero-chip">All Sites</span>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <div>
+            <h2>{{ 'Update Record' if record else 'Create Attendance Record' }}</h2>
+            <p>{% if record %}Adjust the selected record and keep the current month filter intact.{% else %}Add a manual attendance record for the selected period.{% endif %}</p>
+        </div>
+    </div>
     {% if error %}
     <div class="error">{{ error }}</div>
     {% endif %}
@@ -36,40 +57,43 @@
                 <input type="datetime-local" name="check_out_at" value="{{ form_data.get('check_out_at', record.check_out_at.strftime('%Y-%m-%dT%H:%M') if record and record.check_out_at else '') }}">
             </label>
         </div>
-        <label style="display:block; margin-top: 12px;">
+        <label style="margin-top: 14px;">
             Notes
             <textarea name="notes">{{ form_data.get('notes', record.notes if record else '') }}</textarea>
         </label>
-        <div class="actions" style="margin-top: 14px;">
+        <div class="actions" style="margin-top: 16px;">
             <button type="submit">{{ 'Update Record' if record else 'Save Record' }}</button>
             {% if record %}
             <a class="button secondary" href="{{ request.url_for('attendance') }}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Cancel</a>
             {% endif %}
         </div>
     </form>
-</div>
+</section>
 
-<div class="panel" style="margin-top: 18px;">
-    <div class="actions" style="justify-content: space-between;">
+<section class="panel panel-muted">
+    <div class="toolbar">
         <div>
-            <h2 style="margin:0;">Attendance Records</h2>
-            <p style="margin:6px 0 0; color: var(--muted);">Gunakan export submission untuk jadual bulanan client dalam format PDF atau Excel.</p>
+            <h2>Monthly Attendance Records</h2>
+            <p class="panel-subtitle">Filter the working period and export a client-ready PDF or Excel submission.</p>
         </div>
         <form class="actions" method="get" action="{{ request.url_for('attendance') }}">
-            <select name="site_id" style="width:220px;">
+            <select name="site_id" style="min-width: 220px;">
                 <option value="">All Sites</option>
                 {% for site in sites %}
                 <option value="{{ site.id }}" {% if selected_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
                 {% endfor %}
             </select>
-            <input type="number" name="month" value="{{ selected_month }}" min="1" max="12" style="width:100px;">
-            <input type="number" name="year" value="{{ selected_year }}" min="2020" max="2100" style="width:120px;">
-            <button type="submit">Filter</button>
+            <input type="number" name="month" value="{{ selected_month }}" min="1" max="12" style="width: 100px;">
+            <input type="number" name="year" value="{{ selected_year }}" min="2020" max="2100" style="width: 120px;">
+            <button type="submit">Apply Filter</button>
             <a class="button secondary" href="{{ request.url_for('monthly_report') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Submission PDF</a>
             <a class="button secondary" href="{{ request.url_for('monthly_report_excel') }}?year={{ selected_year }}&month={{ selected_month }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Submission Excel</a>
         </form>
     </div>
-    <div class="table-wrap" style="margin-top: 14px;">
+</section>
+
+<section class="panel">
+    <div class="table-wrap">
         <table>
             <thead>
                 <tr>
@@ -79,7 +103,7 @@
                     <th>Check-In</th>
                     <th>Check-Out</th>
                     <th>Notes</th>
-                    <th></th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -91,24 +115,28 @@
                     <td>{{ item.check_in_at.strftime('%Y-%m-%d %H:%M') if item.check_in_at else '-' }}</td>
                     <td>{{ item.check_out_at.strftime('%Y-%m-%d %H:%M') if item.check_out_at else '-' }}</td>
                     <td>{{ item.notes or '-' }}</td>
-                    <td class="actions">
-                        <a class="button secondary" href="{{ request.url_for('attendance_edit', record_id=item.id) }}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Edit</a>
-                        <form method="post" action="{{ request.url_for('attendance_delete', record_id=item.id) }}">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-                            <input type="hidden" name="month" value="{{ selected_month }}">
-                            <input type="hidden" name="year" value="{{ selected_year }}">
-                            {% if selected_site_id %}
-                            <input type="hidden" name="site_id" value="{{ selected_site_id }}">
-                            {% endif %}
-                            <button class="button danger" type="submit">Delete</button>
-                        </form>
+                    <td>
+                        <div class="table-actions">
+                            <a class="button secondary" href="{{ request.url_for('attendance_edit', record_id=item.id) }}?month={{ selected_month }}&year={{ selected_year }}{% if selected_site_id %}&site_id={{ selected_site_id }}{% endif %}">Edit</a>
+                            <form method="post" action="{{ request.url_for('attendance_delete', record_id=item.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                                <input type="hidden" name="month" value="{{ selected_month }}">
+                                <input type="hidden" name="year" value="{{ selected_year }}">
+                                {% if selected_site_id %}
+                                <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                                {% endif %}
+                                <button class="danger" type="submit">Delete</button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="7">No attendance records found for this period.</td></tr>
+                <tr>
+                    <td colspan="7" class="empty-state">No attendance records were found for this period.</td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-</div>
+</section>
 {% endblock %}

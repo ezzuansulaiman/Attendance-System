@@ -8,6 +8,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from config import get_settings
+from services.leave_service import leave_label
 from web.security import ADMIN_SESSION_KEY, csrf_token as get_csrf_token, session_admin_username, verify_csrf_token
 
 settings = get_settings()
@@ -17,6 +18,7 @@ templates.env.globals["current_year"] = lambda: datetime.now(local_tz).year
 templates.env.globals["current_month"] = lambda: datetime.now(local_tz).month
 templates.env.globals["current_company_name"] = lambda: settings.company_name
 templates.env.globals["csrf_token"] = get_csrf_token
+templates.env.globals["leave_label"] = leave_label
 
 
 class FormValidationError(ValueError):
