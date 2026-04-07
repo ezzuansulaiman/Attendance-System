@@ -16,7 +16,8 @@ from bot.context import (
     worker_group_restriction_text,
     worker_chat_is_allowed,
 )
-from bot.keyboards import admin_menu_keyboard, worker_menu_keyboard
+from bot.keyboards import WORKER_MENU_BUTTON, main_menu_keyboard, worker_menu_keyboard
+from bot.admin_handlers import send_admin_menu_message
 from bot.messages import admin_menu_text, registration_intro_text, worker_menu_text
 from bot.states import RegistrationStates
 from config import get_settings
@@ -33,6 +34,21 @@ router = Router()
 settings = get_settings()
 
 
+async def _send_navigation_menu(message: Message, *, show_worker_menu: bool, show_admin_menu: bool) -> None:
+    reply_markup = None
+    if message.chat.type == "private":
+        reply_markup = main_menu_keyboard(show_worker_menu=show_worker_menu, show_admin_menu=show_admin_menu)
+    if reply_markup:
+        await message.answer(
+            "Butang menu sudah dipaparkan di bawah. Pilih menu yang anda perlukan tanpa menaip command slash.",
+            reply_markup=reply_markup,
+        )
+
+
+async def _send_worker_menu_message(message: Message) -> None:
+    await message.answer(worker_menu_text(), reply_markup=worker_menu_keyboard())
+
+
 @router.message(CommandStart())
 @router.message(Command("menu"))
 async def show_menu(message: Message, state: FSMContext) -> None:
@@ -46,13 +62,34 @@ async def show_menu(message: Message, state: FSMContext) -> None:
         await message.answer(registration_intro_text())
         return
 
+    await _send_navigation_menu(
+        message,
+        show_worker_menu=bool(worker),
+        show_admin_menu=is_admin(message.from_user.id),
+    )
     if worker:
-        await message.answer(worker_menu_text(), reply_markup=worker_menu_keyboard())
+        await _send_worker_menu_message(message)
     if is_admin(message.from_user.id):
-        await message.answer(
-            admin_menu_text(web_login_enabled=bool(settings.admin_web_login_url)),
-            reply_markup=admin_menu_keyboard(web_login_url=settings.admin_web_login_url),
-        )
+        await send_admin_menu_message(message)
+
+
+@router.message(F.text == WORKER_MENU_BUTTON)
+async def show_worker_menu_from_text_button(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    worker = await load_registered_worker(message.from_user.id)
+    if not worker:
+        await message.answer(registered_workers_only_text())
+        return
+    if not worker_chat_is_allowed(worker, message):
+        await message.answer(worker_group_restriction_text())
+        return
+
+    await _send_navigation_menu(
+        message,
+        show_worker_menu=True,
+        show_admin_menu=is_admin(message.from_user.id),
+    )
+    await _send_worker_menu_message(message)
 
 
 @router.callback_query(F.data.in_({"attendance:checkin", "attendance:checkout"}))
@@ -128,6 +165,11 @@ async def capture_registration_ic(message: Message, state: FSMContext) -> None:
             return
 
     await state.clear()
+    await _send_navigation_menu(
+        message,
+        show_worker_menu=True,
+        show_admin_menu=is_admin(message.from_user.id),
+    )
     await message.answer(
         f"Pendaftaran untuk {worker.full_name} telah berjaya.\n"
         "Anda kini boleh menggunakan menu kehadiran.",

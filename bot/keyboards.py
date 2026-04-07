@@ -1,6 +1,31 @@
 from typing import Optional
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+
+WORKER_MENU_BUTTON = "Menu Kehadiran"
+ADMIN_MENU_BUTTON = "Menu Admin"
+
+
+def main_menu_keyboard(*, show_worker_menu: bool, show_admin_menu: bool) -> Optional[ReplyKeyboardMarkup]:
+    keyboard_rows: list[list[KeyboardButton]] = []
+    first_row: list[KeyboardButton] = []
+
+    if show_worker_menu:
+        first_row.append(KeyboardButton(text=WORKER_MENU_BUTTON))
+    if show_admin_menu:
+        first_row.append(KeyboardButton(text=ADMIN_MENU_BUTTON))
+    if first_row:
+        keyboard_rows.append(first_row)
+
+    if not keyboard_rows:
+        return None
+
+    return ReplyKeyboardMarkup(
+        keyboard=keyboard_rows,
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder="Pilih menu yang anda perlukan",
+    )
 
 
 def worker_menu_keyboard() -> InlineKeyboardMarkup:

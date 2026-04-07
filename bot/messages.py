@@ -8,7 +8,7 @@ from services.leave_service import annual_leave_notice_text, leave_label
 def worker_menu_text() -> str:
     return (
         "<b>Menu Kehadiran</b>\n"
-        "Sila gunakan butang di bawah dalam kumpulan pekerja atau chat peribadi.\n\n"
+        "Sila gunakan butang menu yang dipaparkan. Anda tidak perlu menaip <code>/menu</code>.\n\n"
         "Pekerja yang berdaftar boleh merekod masuk, merekod keluar, dan memohon cuti.\n"
         f"{annual_leave_notice_text()}\n"
         "Untuk Cuti Sakit dan Cuti Kecemasan, anda akan diminta muat naik gambar sokongan. Hanya <code>file_id</code> Telegram akan disimpan."
@@ -39,13 +39,13 @@ def registration_intro_text() -> str:
 
 def admin_menu_text(*, web_login_enabled: bool) -> str:
     web_line = (
-        "\nUse <b>Open Admin Web</b> to open the dashboard login page in your browser."
+        "\nGunakan <b>Open Admin Web</b> untuk membuka halaman login dashboard di browser."
         if web_login_enabled
-        else "\nSet <code>WEB_BASE_URL</code> to show a direct dashboard link here."
+        else "\nTetapkan <code>WEB_BASE_URL</code> jika anda mahu pautan dashboard dipaparkan di sini."
     )
     return (
-        "<b>Admin Menu</b>\n"
-        "Use the buttons below to review pending leave requests or generate the current monthly PDF report."
+        "<b>Menu Admin</b>\n"
+        "Sila gunakan butang menu yang dipaparkan. Anda tidak perlu menaip <code>/admin</code>."
         f"{web_line}"
     )
 

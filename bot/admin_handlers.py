@@ -8,7 +8,7 @@ from aiogram.filters import Command
 from aiogram.types import BotCommand, BufferedInputFile, CallbackQuery, Message
 
 from bot.context import is_admin, local_tz
-from bot.keyboards import admin_menu_keyboard, leave_review_keyboard
+from bot.keyboards import ADMIN_MENU_BUTTON, admin_menu_keyboard, leave_review_keyboard
 from bot.leave_handlers import notify_worker_review
 from bot.messages import admin_menu_text, build_leave_summary_text
 from config import get_settings
@@ -26,15 +26,27 @@ router = Router()
 settings = get_settings()
 
 
+async def send_admin_menu_message(message: Message) -> None:
+    await message.answer(
+        admin_menu_text(web_login_enabled=bool(settings.admin_web_login_url)),
+        reply_markup=admin_menu_keyboard(web_login_url=settings.admin_web_login_url),
+    )
+
+
 @router.message(Command("admin"))
 async def admin_menu(message: Message) -> None:
     if not is_admin(message.from_user.id):
         await message.answer("This command is restricted to Telegram admins configured in ADMIN_IDS.")
         return
-    await message.answer(
-        admin_menu_text(web_login_enabled=bool(settings.admin_web_login_url)),
-        reply_markup=admin_menu_keyboard(web_login_url=settings.admin_web_login_url),
-    )
+    await send_admin_menu_message(message)
+
+
+@router.message(F.text == ADMIN_MENU_BUTTON)
+async def admin_menu_from_text_button(message: Message) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("Menu ini hanya untuk pentadbir yang didaftarkan.")
+        return
+    await send_admin_menu_message(message)
 
 
 @router.callback_query(F.data == "admin:pending")
