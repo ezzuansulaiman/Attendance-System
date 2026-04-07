@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, Request
-from fastapi.responses import Response
+from fastapi.responses import PlainTextResponse, Response
 
 from models import session_scope
+from services.pdf_generator import PdfExportError
 from services.report_service import (
     build_report_download_filename,
     generate_monthly_attendance_excel,
@@ -14,6 +15,7 @@ from services.report_service import (
 from web.dependencies import require_admin
 
 router = APIRouter(prefix="/reports")
+PDF_EXPORT_FAILURE_MESSAGE = "Unable to generate the PDF report right now. Please review the server logs and try again."
 
 
 def _download_headers(*, filename: str) -> dict[str, str]:
@@ -37,8 +39,11 @@ async def monthly_report(
     if redirect:
         return redirect
 
-    async with session_scope() as session:
-        pdf_bytes = await generate_monthly_attendance_pdf(session, year=year, month=month, site_id=site_id)
+    try:
+        async with session_scope() as session:
+            pdf_bytes = await generate_monthly_attendance_pdf(session, year=year, month=month, site_id=site_id)
+    except PdfExportError:
+        return PlainTextResponse(PDF_EXPORT_FAILURE_MESSAGE, status_code=500)
     filename = build_report_download_filename(year=year, month=month, extension="pdf")
     return Response(
         content=pdf_bytes,

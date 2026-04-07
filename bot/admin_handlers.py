@@ -20,6 +20,7 @@ from services.leave_service import (
     list_pending_leave_requests,
     reject_leave_request,
 )
+from services.pdf_generator import PdfExportError
 from services.report_service import (
     build_report_download_filename,
     generate_monthly_attendance_excel,
@@ -28,6 +29,7 @@ from services.report_service import (
 
 router = Router()
 settings = get_settings()
+PDF_EXPORT_FAILURE_MESSAGE = "PDF tidak dapat dijana sekarang. Sila semak log pelayan dan cuba lagi."
 
 
 async def send_admin_menu_message(message: Message) -> None:
@@ -99,12 +101,16 @@ async def send_current_month_report(callback: CallbackQuery) -> None:
         return
 
     today = datetime.now(local_tz).date()
-    async with session_scope() as session:
-        pdf_bytes = await generate_monthly_attendance_pdf(
-            session,
-            year=today.year,
-            month=today.month,
-        )
+    try:
+        async with session_scope() as session:
+            pdf_bytes = await generate_monthly_attendance_pdf(
+                session,
+                year=today.year,
+                month=today.month,
+            )
+    except PdfExportError:
+        await callback.message.answer(PDF_EXPORT_FAILURE_MESSAGE)
+        return
 
     filename = build_report_download_filename(year=today.year, month=today.month, extension="pdf")
     month_name = calendar.month_name[today.month]

@@ -4,6 +4,7 @@ import re
 
 from fastapi.testclient import TestClient
 
+from services.pdf_generator import PdfExportError
 from web.app import create_app
 from web.dependencies import settings
 
@@ -67,3 +68,19 @@ def test_monthly_excel_report_download_route_returns_attachment() -> None:
     assert response.headers["expires"] == "0"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.content.startswith(b"PK")
+
+
+def test_monthly_pdf_report_download_route_returns_controlled_error_on_pdf_failure(monkeypatch) -> None:
+    client = TestClient(create_app())
+    _login(client)
+
+    async def _fake_generate_monthly_attendance_pdf(*args, **kwargs):
+        raise PdfExportError("boom")
+
+    monkeypatch.setattr("web.report_routes.generate_monthly_attendance_pdf", _fake_generate_monthly_attendance_pdf)
+
+    response = client.get("/reports/monthly?year=2026&month=4", follow_redirects=False)
+
+    assert response.status_code == 500
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "Unable to generate the PDF report right now." in response.text

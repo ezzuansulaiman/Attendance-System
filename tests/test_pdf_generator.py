@@ -1,3 +1,5 @@
+import pytest
+
 from services.pdf_generator import PDF_COPY, build_monthly_attendance_pdf
 
 
@@ -64,6 +66,33 @@ def test_build_monthly_attendance_pdf_accepts_existing_report_shape_with_summary
         "average_present_days": 2,
         "completion_rate": 100,
     }
+
+    pdf_bytes = build_monthly_attendance_pdf(report=report)
+
+    assert pdf_bytes.startswith(b"%PDF")
+    assert len(pdf_bytes) > 1000
+
+
+@pytest.mark.parametrize(
+    ("field_name", "row_scoped"),
+    [
+        ("worker_name", True),
+        ("employee_code", True),
+        ("company_name", False),
+        ("site_name", False),
+    ],
+)
+def test_build_monthly_attendance_pdf_handles_long_unbroken_text_fields(
+    field_name: str,
+    row_scoped: bool,
+) -> None:
+    report = _sample_report()
+    long_value = "X" * 5000
+
+    if row_scoped:
+        report["rows"][0][field_name] = long_value
+    else:
+        report[field_name] = long_value
 
     pdf_bytes = build_monthly_attendance_pdf(report=report)
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import calendar
 import io
+import logging
+import re
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -14,6 +16,10 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 
 PAGE_WIDTH, _ = landscape(A4)
+logger = logging.getLogger(__name__)
+PDF_BREAK_OPPORTUNITY = "\u200b"
+CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+WHITESPACE_PATTERN = re.compile(r"\s+")
 PDF_COPY = {
     "eyebrow": "MONTHLY ATTENDANCE",
     "title": "Attendance Report",
@@ -23,8 +29,80 @@ PDF_COPY = {
 }
 
 
+class PdfExportError(RuntimeError):
+    pass
+
+
+def _normalize_pdf_text(value: Any) -> str:
+    text = "" if value is None else str(value)
+    text = CONTROL_CHARACTER_PATTERN.sub("", text)
+    text = WHITESPACE_PATTERN.sub(" ", text).strip()
+    return text
+
+
+def _truncate_pdf_text(text: str, *, max_length: int) -> str:
+    if len(text) <= max_length:
+        return text
+    if max_length <= 3:
+        return text[:max_length]
+    return f'{text[: max_length - 3].rstrip()}...'
+
+
+def _insert_break_opportunities(text: str, *, chunk_size: int) -> str:
+    if not text:
+        return ""
+
+    tokens = text.split(" ")
+    wrapped_tokens = []
+    for token in tokens:
+        if len(token) <= chunk_size:
+            wrapped_tokens.append(token)
+            continue
+        wrapped_tokens.append(PDF_BREAK_OPPORTUNITY.join(token[index : index + chunk_size] for index in range(0, len(token), chunk_size)))
+    return " ".join(wrapped_tokens)
+
+
+def _sanitize_pdf_field(value: Any, *, max_length: int, chunk_size: int) -> str:
+    normalized = _normalize_pdf_text(value)
+    truncated = _truncate_pdf_text(normalized, max_length=max_length)
+    return _insert_break_opportunities(truncated, chunk_size=chunk_size)
+
+
+def _prepare_report_for_pdf(report: dict[str, Any]) -> dict[str, Any]:
+    sanitized_rows: list[dict[str, Any]] = []
+    for row in report.get("rows", []):
+        sanitized_row = dict(row)
+        sanitized_row["worker_name"] = _sanitize_pdf_field(row.get("worker_name"), max_length=240, chunk_size=16)
+        sanitized_row["employee_code"] = _sanitize_pdf_field(row.get("employee_code"), max_length=80, chunk_size=8)
+        sanitized_row["days"] = [_normalize_pdf_text(value) for value in row.get("days", [])]
+        sanitized_rows.append(sanitized_row)
+
+    sanitized_report = dict(report)
+    sanitized_report["company_name"] = _sanitize_pdf_field(report.get("company_name"), max_length=240, chunk_size=24)
+    sanitized_report["site_name"] = _sanitize_pdf_field(report.get("site_name"), max_length=240, chunk_size=24)
+    sanitized_report["period_label"] = _sanitize_pdf_field(report.get("period_label"), max_length=80, chunk_size=20)
+    sanitized_report["generated_at"] = _sanitize_pdf_field(report.get("generated_at"), max_length=80, chunk_size=20)
+    sanitized_report["rows"] = sanitized_rows
+    return sanitized_report
+
+
+def _build_pdf_debug_context(report: dict[str, Any]) -> dict[str, Any]:
+    rows = list(report.get("rows", []))
+    worker_name_lengths = [_normalize_pdf_text(row.get("worker_name")) for row in rows]
+    employee_code_lengths = [_normalize_pdf_text(row.get("employee_code")) for row in rows]
+    return {
+        "year": report.get("year"),
+        "month": report.get("month"),
+        "site_scope": _normalize_pdf_text(report.get("site_name")),
+        "worker_count": len(rows),
+        "max_worker_name_length": max((len(value) for value in worker_name_lengths), default=0),
+        "max_employee_code_length": max((len(value) for value in employee_code_lengths), default=0),
+        "is_empty": not rows,
+    }
+
+
 def _paragraph(value: Any, style: ParagraphStyle) -> Paragraph:
-    return Paragraph(escape(str(value)), style)
+    return Paragraph(escape(_normalize_pdf_text(value)), style)
 
 
 def _build_styles() -> dict[str, ParagraphStyle]:
@@ -285,25 +363,31 @@ def _draw_footer(canvas, document) -> None:
 
 
 def build_monthly_attendance_pdf(*, report: dict[str, Any]) -> bytes:
-    year = int(report["year"])
-    month = int(report["month"])
-    buffer = io.BytesIO()
-    document = SimpleDocTemplate(
-        buffer,
-        pagesize=landscape(A4),
-        leftMargin=12 * mm,
-        rightMargin=12 * mm,
-        topMargin=14 * mm,
-        bottomMargin=16 * mm,
-        title=f'{PDF_COPY["title"]} - {calendar.month_name[month]} {year}',
-    )
-    styles = _build_styles()
-    story = [
-        _build_header_band(report=report, styles=styles),
-        Spacer(1, 8),
-        _build_metadata_table(report=report, styles=styles),
-        Spacer(1, 10),
-        _build_attendance_table(report=report, styles=styles),
-    ]
-    document.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
-    return buffer.getvalue()
+    debug_context = _build_pdf_debug_context(report)
+    sanitized_report = _prepare_report_for_pdf(report)
+    try:
+        year = int(sanitized_report["year"])
+        month = int(sanitized_report["month"])
+        buffer = io.BytesIO()
+        document = SimpleDocTemplate(
+            buffer,
+            pagesize=landscape(A4),
+            leftMargin=12 * mm,
+            rightMargin=12 * mm,
+            topMargin=14 * mm,
+            bottomMargin=16 * mm,
+            title=f'{PDF_COPY["title"]} - {calendar.month_name[month]} {year}',
+        )
+        styles = _build_styles()
+        story = [
+            _build_header_band(report=sanitized_report, styles=styles),
+            Spacer(1, 8),
+            _build_metadata_table(report=sanitized_report, styles=styles),
+            Spacer(1, 10),
+            _build_attendance_table(report=sanitized_report, styles=styles),
+        ]
+        document.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
+        return buffer.getvalue()
+    except Exception as exc:
+        logger.exception("Failed to build monthly attendance PDF: %s", debug_context)
+        raise PdfExportError("Unable to build monthly attendance PDF.") from exc
