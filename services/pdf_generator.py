@@ -13,43 +13,37 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 
 PAGE_WIDTH, PAGE_HEIGHT = landscape(A4)
+PDF_COPY = {
+    "title": "Monthly Attendance Report",
+    "footer_label": "Attendance Report",
+    "metadata_labels": ("Company", "Site", "Period", "Generated On"),
+    "summary_labels": (
+        "Workers",
+        "Present Days",
+        "Checked-Out Days",
+        "Avg. Present Days",
+        "Completion Rate",
+    ),
+}
 
 
 def _build_styles() -> dict[str, ParagraphStyle]:
     sample_styles = getSampleStyleSheet()
     return {
-        "eyebrow": ParagraphStyle(
-            "ReportEyebrow",
-            parent=sample_styles["BodyText"],
-            fontName="Helvetica-Bold",
-            fontSize=8,
-            textColor=colors.HexColor("#6b7280"),
-            leading=10,
-            alignment=TA_LEFT,
-        ),
         "title": ParagraphStyle(
             "ReportTitle",
             parent=sample_styles["Title"],
             fontName="Helvetica-Bold",
-            fontSize=18,
-            leading=22,
+            fontSize=17,
+            leading=21,
             textColor=colors.HexColor("#0f172a"),
-            alignment=TA_LEFT,
-        ),
-        "subtitle": ParagraphStyle(
-            "ReportSubtitle",
-            parent=sample_styles["BodyText"],
-            fontName="Helvetica",
-            fontSize=9,
-            leading=12,
-            textColor=colors.HexColor("#475569"),
             alignment=TA_LEFT,
         ),
         "meta_label": ParagraphStyle(
             "MetaLabel",
             parent=sample_styles["BodyText"],
             fontName="Helvetica-Bold",
-            fontSize=7,
+            fontSize=7.2,
             leading=9,
             textColor=colors.HexColor("#64748b"),
             alignment=TA_LEFT,
@@ -58,30 +52,40 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             "MetaValue",
             parent=sample_styles["BodyText"],
             fontName="Helvetica-Bold",
-            fontSize=9,
+            fontSize=9.2,
             leading=11,
             textColor=colors.HexColor("#0f172a"),
             alignment=TA_LEFT,
         ),
-        "system_note": ParagraphStyle(
-            "SystemNote",
+        "summary_label": ParagraphStyle(
+            "SummaryLabel",
             parent=sample_styles["BodyText"],
-            fontName="Helvetica-Oblique",
-            fontSize=8,
-            leading=10,
-            textColor=colors.HexColor("#475569"),
+            fontName="Helvetica-Bold",
+            fontSize=7.2,
+            leading=9,
+            textColor=colors.white,
+            alignment=TA_LEFT,
+        ),
+        "summary_value": ParagraphStyle(
+            "SummaryValue",
+            parent=sample_styles["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=9.2,
+            leading=11,
+            textColor=colors.HexColor("#0f172a"),
             alignment=TA_LEFT,
         ),
     }
 
 
 def _build_metadata_table(*, report: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
+    company_label, site_label, period_label, generated_label = PDF_COPY["metadata_labels"]
     metadata_rows = [
         [
-            Paragraph("COMPANY", styles["meta_label"]),
-            Paragraph("SITE", styles["meta_label"]),
-            Paragraph("REPORT PERIOD", styles["meta_label"]),
-            Paragraph("GENERATED", styles["meta_label"]),
+            Paragraph(company_label, styles["meta_label"]),
+            Paragraph(site_label, styles["meta_label"]),
+            Paragraph(period_label, styles["meta_label"]),
+            Paragraph(generated_label, styles["meta_label"]),
         ],
         [
             Paragraph(str(report["company_name"]), styles["meta_value"]),
@@ -90,18 +94,20 @@ def _build_metadata_table(*, report: dict[str, Any], styles: dict[str, Paragraph
             Paragraph(str(report["generated_at"]), styles["meta_value"]),
         ],
     ]
-    metadata_table = Table(metadata_rows, colWidths=[74 * mm, 54 * mm, 54 * mm, 44 * mm])
+    metadata_table = Table(metadata_rows, colWidths=[72 * mm, 52 * mm, 56 * mm, 46 * mm])
     metadata_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e2e8f0")),
-                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#f8fafc")),
-                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#cbd5e1")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.white),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dbe4ee")),
                 ("LEFTPADDING", (0, 0), (-1, -1), 8),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, 0), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                ("TOPPADDING", (0, 1), (-1, 1), 7),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 7),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ]
         )
@@ -110,35 +116,37 @@ def _build_metadata_table(*, report: dict[str, Any], styles: dict[str, Paragraph
 
 
 def _build_summary_table(*, summary: dict[str, Any], styles: dict[str, ParagraphStyle]) -> Table:
+    workers_label, present_label, checked_out_label, avg_label, completion_label = PDF_COPY["summary_labels"]
     summary_rows = [
         [
-            Paragraph("ACTIVE WORKERS", styles["meta_label"]),
-            Paragraph("ATTENDANCE DAYS", styles["meta_label"]),
-            Paragraph("CHECKED-OUT DAYS", styles["meta_label"]),
-            Paragraph("AVG DAYS / WORKER", styles["meta_label"]),
-            Paragraph("COMPLETION RATE", styles["meta_label"]),
+            Paragraph(workers_label, styles["summary_label"]),
+            Paragraph(present_label, styles["summary_label"]),
+            Paragraph(checked_out_label, styles["summary_label"]),
+            Paragraph(avg_label, styles["summary_label"]),
+            Paragraph(completion_label, styles["summary_label"]),
         ],
         [
-            Paragraph(str(summary["total_workers"]), styles["meta_value"]),
-            Paragraph(str(summary["total_present_days"]), styles["meta_value"]),
-            Paragraph(str(summary["total_completed_days"]), styles["meta_value"]),
-            Paragraph(str(summary["average_present_days"]), styles["meta_value"]),
-            Paragraph(f'{summary["completion_rate"]}%', styles["meta_value"]),
+            Paragraph(str(summary["total_workers"]), styles["summary_value"]),
+            Paragraph(str(summary["total_present_days"]), styles["summary_value"]),
+            Paragraph(str(summary["total_completed_days"]), styles["summary_value"]),
+            Paragraph(str(summary["average_present_days"]), styles["summary_value"]),
+            Paragraph(f'{summary["completion_rate"]}%', styles["summary_value"]),
         ],
     ]
-    summary_table = Table(summary_rows, colWidths=[48 * mm, 48 * mm, 48 * mm, 48 * mm, 48 * mm])
+    summary_table = Table(summary_rows, colWidths=[45.2 * mm] * 5)
     summary_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16324f")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#f8fafc")),
-                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#cbd5e1")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#334155")),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.white),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dbe4ee")),
                 ("LEFTPADDING", (0, 0), (-1, -1), 8),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, 0), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                ("TOPPADDING", (0, 1), (-1, 1), 7),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 7),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
             ]
@@ -170,19 +178,22 @@ def _build_attendance_table(*, report: dict[str, Any]) -> Table:
 
     table = Table(table_data, colWidths=[18, 120, 42, 60] + [12.7] * 31 + [24, 24], repeatRows=1)
     style_commands: list[tuple[Any, ...]] = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16324f")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#334155")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, 0), 6.5),
+        ("FONTSIZE", (0, 0), (-1, 0), 6.4),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#94a3b8")),
+        ("BOX", (0, 0), (-1, -1), 0.45, colors.HexColor("#cbd5e1")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.2, colors.HexColor("#dbe4ee")),
         ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 1), (-1, -1), 6.5),
+        ("FONTSIZE", (0, 1), (-1, -1), 6.3),
         ("LEFTPADDING", (0, 0), (-1, -1), 2),
         ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, 0), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+        ("TOPPADDING", (0, 1), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), 4),
         ("ALIGN", (1, 1), (1, -1), "LEFT"),
         ("ALIGN", (3, 1), (3, -1), "LEFT"),
         ("LEFTPADDING", (1, 1), (1, -1), 5),
@@ -200,30 +211,10 @@ def _build_attendance_table(*, report: dict[str, Any]) -> Table:
             style_commands.append(("TEXTCOLOR", (column_index, 1), (column_index, -1), colors.HexColor("#94a3b8")))
             continue
         if calendar.weekday(year, month, day) >= 5:
-            style_commands.append(("BACKGROUND", (column_index, 0), (column_index, -1), colors.HexColor("#edf2f7")))
+            style_commands.append(("BACKGROUND", (column_index, 0), (column_index, -1), colors.HexColor("#f3f4f6")))
 
     table.setStyle(TableStyle(style_commands))
     return table
-
-
-def _build_system_generated_note(styles: dict[str, ParagraphStyle]) -> Table:
-    note_table = Table(
-        [[Paragraph("Computer generated report. No signature is required.", styles["system_note"])]],
-        colWidths=[261 * mm],
-    )
-    note_table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
-                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#cbd5e1")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 10),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-                ("TOPPADDING", (0, 0), (-1, -1), 8),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-            ]
-        )
-    )
-    return note_table
 
 
 def _draw_footer(canvas, document) -> None:
@@ -232,7 +223,7 @@ def _draw_footer(canvas, document) -> None:
     canvas.line(document.leftMargin, 11 * mm, PAGE_WIDTH - document.rightMargin, 11 * mm)
     canvas.setFont("Helvetica", 7)
     canvas.setFillColor(colors.HexColor("#64748b"))
-    canvas.drawString(document.leftMargin, 7 * mm, "Monthly attendance submission")
+    canvas.drawString(document.leftMargin, 7 * mm, str(PDF_COPY["footer_label"]))
     canvas.drawRightString(PAGE_WIDTH - document.rightMargin, 7 * mm, f"Page {canvas.getPageNumber()}")
     canvas.restoreState()
 
@@ -246,28 +237,19 @@ def build_monthly_attendance_pdf(*, report: dict[str, Any]) -> bytes:
         pagesize=landscape(A4),
         leftMargin=12 * mm,
         rightMargin=12 * mm,
-        topMargin=12 * mm,
+        topMargin=14 * mm,
         bottomMargin=16 * mm,
-        title=f"Attendance Submission - {calendar.month_name[month]} {year}",
+        title=f'{PDF_COPY["title"]} - {calendar.month_name[month]} {year}',
     )
     styles = _build_styles()
     story = [
-        Paragraph("ATTENDANCE CLAIM SUBMISSION", styles["eyebrow"]),
-        Spacer(1, 3),
-        Paragraph("Monthly Attendance Report", styles["title"]),
-        Spacer(1, 3),
-        Paragraph(
-            "Prepared for client submission, reconciliation, and attendance confirmation. Use P to indicate a recorded presence for the day.",
-            styles["subtitle"],
-        ),
+        Paragraph(str(PDF_COPY["title"]), styles["title"]),
         Spacer(1, 8),
         _build_metadata_table(report=report, styles=styles),
         Spacer(1, 10),
         _build_summary_table(summary=report["summary"], styles=styles),
         Spacer(1, 10),
         _build_attendance_table(report=report),
-        Spacer(1, 14),
-        _build_system_generated_note(styles),
     ]
     document.build(story, onFirstPage=_draw_footer, onLaterPages=_draw_footer)
     return buffer.getvalue()

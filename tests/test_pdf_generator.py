@@ -1,4 +1,31 @@
-from services.pdf_generator import build_monthly_attendance_pdf
+from services.pdf_generator import PDF_COPY, build_monthly_attendance_pdf
+
+
+def test_pdf_copy_uses_minimal_corporate_labels() -> None:
+    assert PDF_COPY["title"] == "Monthly Attendance Report"
+    assert PDF_COPY["footer_label"] == "Attendance Report"
+    assert PDF_COPY["metadata_labels"] == ("Company", "Site", "Period", "Generated On")
+    assert PDF_COPY["summary_labels"] == (
+        "Workers",
+        "Present Days",
+        "Checked-Out Days",
+        "Avg. Present Days",
+        "Completion Rate",
+    )
+
+    rendered_copy = " | ".join(
+        [
+            str(PDF_COPY["title"]),
+            str(PDF_COPY["footer_label"]),
+            *PDF_COPY["metadata_labels"],
+            *PDF_COPY["summary_labels"],
+        ]
+    )
+
+    assert "ATTENDANCE CLAIM SUBMISSION" not in rendered_copy
+    assert "Prepared for client submission" not in rendered_copy
+    assert "Computer generated report. No signature is required." not in rendered_copy
+    assert "Monthly attendance submission" not in rendered_copy
 
 
 def test_build_monthly_attendance_pdf_returns_content() -> None:
