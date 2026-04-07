@@ -13,9 +13,9 @@ from models.models import LeaveRequest, Worker
 
 REQUIRES_PHOTO = {"mc", "emergency"}
 LEAVE_LABELS = {
-    "annual": "Annual Leave",
-    "mc": "Medical Leave",
-    "emergency": "Emergency Leave",
+    "annual": "Cuti Tahunan",
+    "mc": "Cuti Sakit",
+    "emergency": "Cuti Kecemasan",
 }
 LEAVE_REPORT_CODES = {
     "annual": "AL",
@@ -52,8 +52,8 @@ def annual_leave_notice_days() -> int:
 def annual_leave_notice_text() -> str:
     days = annual_leave_notice_days()
     if days == 1:
-        return "Annual Leave must be applied at least 1 day before the start date."
-    return f"Annual Leave must be applied at least {days} days before the start date."
+        return "Permohonan Cuti Tahunan perlu dibuat sekurang-kurangnya 1 hari sebelum tarikh mula."
+    return f"Permohonan Cuti Tahunan perlu dibuat sekurang-kurangnya {days} hari sebelum tarikh mula."
 
 
 def _clean_notes(value: Optional[str]) -> Optional[str]:

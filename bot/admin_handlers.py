@@ -145,8 +145,8 @@ async def reject_leave(callback: CallbackQuery) -> None:
 async def set_bot_commands(bot: Bot) -> None:
     await bot.set_my_commands(
         [
-            BotCommand(command="start", description="Open the attendance menu"),
-            BotCommand(command="menu", description="Show worker menu"),
+            BotCommand(command="start", description="Buka menu kehadiran"),
+            BotCommand(command="menu", description="Paparkan menu pekerja"),
             BotCommand(command="admin", description="Open admin controls"),
         ]
     )

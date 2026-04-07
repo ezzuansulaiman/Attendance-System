@@ -7,11 +7,11 @@ from services.leave_service import annual_leave_notice_text, leave_label
 
 def worker_menu_text() -> str:
     return (
-        "<b>Attendance Menu</b>\n"
-        "Use the buttons below inside the worker group.\n\n"
-        "Registered workers can check in, check out, and apply leave.\n"
+        "<b>Menu Kehadiran</b>\n"
+        "Sila gunakan butang di bawah dalam kumpulan pekerja atau chat peribadi.\n\n"
+        "Pekerja yang berdaftar boleh merekod masuk, merekod keluar, dan memohon cuti.\n"
         f"{annual_leave_notice_text()}\n"
-        "MC and Emergency Leave will ask for a photo, and only the Telegram <code>file_id</code> is stored."
+        "Untuk Cuti Sakit dan Cuti Kecemasan, anda akan diminta muat naik gambar sokongan. Hanya <code>file_id</code> Telegram akan disimpan."
     )
 
 
@@ -31,9 +31,9 @@ def build_attendance_reminder_text(reminder_type: str) -> str:
 
 def registration_intro_text() -> str:
     return (
-        "<b>First-Time Registration</b>\n"
-        "Before using attendance, please register first.\n\n"
-        "Send your <b>NAME</b>."
+        "<b>Pendaftaran Kali Pertama</b>\n"
+        "Sebelum menggunakan sistem kehadiran, sila daftar terlebih dahulu.\n\n"
+        "Sila hantar <b>NAMA PENUH</b> anda."
     )
 
 
@@ -59,11 +59,11 @@ def build_leave_summary_text(
     reason: str,
 ) -> str:
     return (
-        f"<b>Leave Request #{leave_id}</b>\n"
-        f"Worker: {worker_name}\n"
-        f"Type: {leave_label(leave_type)}\n"
-        f"Dates: {start_date.isoformat()} to {end_date.isoformat()}\n"
-        f"Reason: {reason}"
+        f"<b>Permohonan Cuti #{leave_id}</b>\n"
+        f"Pekerja: {worker_name}\n"
+        f"Jenis: {leave_label(leave_type)}\n"
+        f"Tarikh: {start_date.isoformat()} hingga {end_date.isoformat()}\n"
+        f"Sebab: {reason}"
     )
 
 
@@ -74,10 +74,15 @@ def build_leave_review_text(
     end_date: date,
     status: str,
 ) -> str:
+    status_map = {
+        "approved": "DILULUSKAN",
+        "rejected": "DITOLAK",
+        "pending": "DALAM SEMAKAN",
+    }
     return (
-        f"Your leave request #{leave_id} is now <b>{status.upper()}</b>.\n"
-        f"Type: {leave_label(leave_type)}\n"
-        f"Dates: {start_date.isoformat()} to {end_date.isoformat()}"
+        f"Permohonan cuti anda #{leave_id} kini <b>{status_map.get(status, status.upper())}</b>.\n"
+        f"Jenis: {leave_label(leave_type)}\n"
+        f"Tarikh: {start_date.isoformat()} hingga {end_date.isoformat()}"
     )
 
 
@@ -88,4 +93,4 @@ def parse_user_date(raw_value: str) -> date:
             return datetime.strptime(cleaned, fmt).date()
         except ValueError:
             continue
-    raise ValueError("Please use YYYY-MM-DD or DD/MM/YYYY.")
+    raise ValueError("Sila gunakan format tarikh YYYY-MM-DD atau DD/MM/YYYY.")

@@ -19,6 +19,7 @@ from bot.context import (
 from bot.keyboards import admin_menu_keyboard, worker_menu_keyboard
 from bot.messages import admin_menu_text, registration_intro_text, worker_menu_text
 from bot.states import RegistrationStates
+from config import get_settings
 from models import session_scope
 from services.attendance_service import (
     AttendanceError,
@@ -29,6 +30,7 @@ from services.attendance_service import (
 )
 
 router = Router()
+settings = get_settings()
 
 
 @router.message(CommandStart())
@@ -47,7 +49,10 @@ async def show_menu(message: Message, state: FSMContext) -> None:
     if worker:
         await message.answer(worker_menu_text(), reply_markup=worker_menu_keyboard())
     if is_admin(message.from_user.id):
-        await message.answer(admin_menu_text(), reply_markup=admin_menu_keyboard())
+        await message.answer(
+            admin_menu_text(web_login_enabled=bool(settings.admin_web_login_url)),
+            reply_markup=admin_menu_keyboard(web_login_url=settings.admin_web_login_url),
+        )
 
 
 @router.callback_query(F.data.in_({"attendance:checkin", "attendance:checkout"}))
@@ -72,7 +77,7 @@ async def handle_attendance_action(callback: CallbackQuery) -> None:
                     occurred_at=now,
                 )
                 await callback.message.answer(
-                    f"{worker.full_name} checked in at {record.check_in_at.astimezone(local_tz):%H:%M:%S}."
+                    f"{worker.full_name} berjaya direkod masuk pada {record.check_in_at.astimezone(local_tz):%H:%M:%S}."
                 )
                 return
 
@@ -83,7 +88,7 @@ async def handle_attendance_action(callback: CallbackQuery) -> None:
                 occurred_at=now,
             )
             await callback.message.answer(
-                f"{worker.full_name} checked out at {record.check_out_at.astimezone(local_tz):%H:%M:%S}."
+                f"{worker.full_name} berjaya direkod keluar pada {record.check_out_at.astimezone(local_tz):%H:%M:%S}."
             )
         except AttendanceError as exc:
             await callback.message.answer(str(exc))
@@ -93,19 +98,19 @@ async def handle_attendance_action(callback: CallbackQuery) -> None:
 async def capture_registration_name(message: Message, state: FSMContext) -> None:
     full_name = (message.text or "").strip()
     if not full_name:
-        await message.answer("Please send your <b>NAME</b>.")
+        await message.answer("Sila hantar <b>NAMA PENUH</b> anda.")
         return
 
     await state.update_data(full_name=full_name)
     await state.set_state(RegistrationStates.ic_number)
-    await message.answer("Now send your <b>NO IC</b>.")
+    await message.answer("Baik, sekarang sila hantar <b>NO. IC</b> anda.")
 
 
 @router.message(RegistrationStates.ic_number)
 async def capture_registration_ic(message: Message, state: FSMContext) -> None:
     ic_number = (message.text or "").strip()
     if not ic_number:
-        await message.answer("Please send your <b>NO IC</b>.")
+        await message.answer("Sila hantar <b>NO. IC</b> anda.")
         return
 
     data = await state.get_data()
@@ -124,7 +129,7 @@ async def capture_registration_ic(message: Message, state: FSMContext) -> None:
 
     await state.clear()
     await message.answer(
-        f"Registration completed for {worker.full_name}.\n"
-        "You can now use the attendance menu.",
+        f"Pendaftaran untuk {worker.full_name} telah berjaya.\n"
+        "Anda kini boleh menggunakan menu kehadiran.",
         reply_markup=worker_menu_keyboard(),
     )

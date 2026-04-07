@@ -120,7 +120,7 @@ async def _submit_leave_request(
             leave_request.end_date,
             leave_request.reason,
         )
-        + "\nStatus: PENDING"
+        + "\nStatus: DALAM SEMAKAN"
     )
     await _notify_admins(message.bot, leave_request.id)
     await state.clear()
@@ -139,7 +139,7 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext) -> None:
 
     await state.clear()
     await state.set_state(LeaveApplicationStates.leave_type)
-    await callback.message.answer("Choose the leave type.", reply_markup=leave_type_keyboard())
+    await callback.message.answer("Sila pilih jenis cuti.", reply_markup=leave_type_keyboard())
 
 
 @router.callback_query(F.data.startswith("leave:type:"))
@@ -147,15 +147,15 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     leave_type = callback.data.split(":")[-1]
     if not is_supported_leave_type(leave_type):
-        await callback.message.answer("Unsupported leave type.")
+        await callback.message.answer("Jenis cuti ini tidak disokong.")
         return
 
     await state.update_data(leave_type=leave_type)
     await state.set_state(LeaveApplicationStates.start_date)
-    prompt_lines = [f"{leave_label(leave_type)} selected."]
+    prompt_lines = [f"Jenis cuti dipilih: {leave_label(leave_type)}."]
     if leave_type == "annual":
         prompt_lines.append(annual_leave_notice_text())
-    prompt_lines.append("Send the start date in YYYY-MM-DD or DD/MM/YYYY format.")
+    prompt_lines.append("Sila hantar tarikh mula dalam format YYYY-MM-DD atau DD/MM/YYYY.")
     await callback.message.answer("\n".join(prompt_lines))
 
 
@@ -169,7 +169,7 @@ async def capture_start_date(message: Message, state: FSMContext) -> None:
 
     await state.update_data(start_date=start_date)
     await state.set_state(LeaveApplicationStates.end_date)
-    await message.answer("Now send the end date in YYYY-MM-DD or DD/MM/YYYY format.")
+    await message.answer("Baik, sekarang sila hantar tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.")
 
 
 @router.message(LeaveApplicationStates.end_date)
@@ -182,26 +182,26 @@ async def capture_end_date(message: Message, state: FSMContext) -> None:
 
     data = await state.get_data()
     if end_date < data["start_date"]:
-        await message.answer("End date cannot be earlier than start date.")
+        await message.answer("Tarikh akhir tidak boleh lebih awal daripada tarikh mula.")
         return
 
     await state.update_data(end_date=end_date)
     await state.set_state(LeaveApplicationStates.reason)
-    await message.answer("Send a short reason for the leave.")
+    await message.answer("Sila hantar sebab ringkas bagi permohonan cuti ini.")
 
 
 @router.message(LeaveApplicationStates.reason)
 async def capture_reason(message: Message, state: FSMContext) -> None:
     reason = (message.text or "").strip()
     if not reason:
-        await message.answer("A reason is required.")
+        await message.answer("Sebab permohonan cuti diperlukan.")
         return
 
     data = await state.get_data()
     await state.update_data(reason=reason)
     if data["leave_type"] in {"mc", "emergency"}:
         await state.set_state(LeaveApplicationStates.photo)
-        await message.answer("Upload the supporting photo now. Only the Telegram file_id will be saved.")
+        await message.answer("Sila muat naik gambar sokongan sekarang. Hanya Telegram file_id akan disimpan.")
         return
 
     await _submit_leave_request(message, state)
@@ -215,4 +215,4 @@ async def capture_photo(message: Message, state: FSMContext) -> None:
 
 @router.message(LeaveApplicationStates.photo)
 async def prompt_photo_again(message: Message) -> None:
-    await message.answer("A photo is required for MC and Emergency Leave. Please upload an image.")
+    await message.answer("Gambar sokongan diperlukan untuk Cuti Sakit dan Cuti Kecemasan. Sila muat naik imej.")

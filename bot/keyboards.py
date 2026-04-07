@@ -7,10 +7,10 @@ def worker_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="Check-In", callback_data="attendance:checkin"),
-                InlineKeyboardButton(text="Check-Out", callback_data="attendance:checkout"),
+                InlineKeyboardButton(text="Rekod Masuk", callback_data="attendance:checkin"),
+                InlineKeyboardButton(text="Rekod Keluar", callback_data="attendance:checkout"),
             ],
-            [InlineKeyboardButton(text="Apply Leave", callback_data="leave:start")],
+            [InlineKeyboardButton(text="Mohon Cuti", callback_data="leave:start")],
         ]
     )
 
@@ -18,9 +18,9 @@ def worker_menu_keyboard() -> InlineKeyboardMarkup:
 def leave_type_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Annual", callback_data="leave:type:annual")],
-            [InlineKeyboardButton(text="MC", callback_data="leave:type:mc")],
-            [InlineKeyboardButton(text="Emergency", callback_data="leave:type:emergency")],
+            [InlineKeyboardButton(text="Cuti Tahunan", callback_data="leave:type:annual")],
+            [InlineKeyboardButton(text="Cuti Sakit", callback_data="leave:type:mc")],
+            [InlineKeyboardButton(text="Cuti Kecemasan", callback_data="leave:type:emergency")],
         ]
     )
 

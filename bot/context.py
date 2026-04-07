@@ -49,16 +49,16 @@ async def load_registered_worker(telegram_user_id: int):
 
 
 def worker_group_restriction_text() -> str:
-    return "This bot is restricted to the configured worker group or private chat."
+    return "Bot ini hanya boleh digunakan dalam kumpulan pekerja yang ditetapkan atau melalui chat peribadi."
 
 
 def attendance_restriction_text() -> str:
-    return "Attendance actions are only allowed in the configured worker group or in private chat."
+    return "Fungsi kehadiran hanya boleh digunakan dalam kumpulan pekerja yang ditetapkan atau melalui chat peribadi."
 
 
 def leave_restriction_text() -> str:
-    return "Leave applications are only allowed in the configured worker group or in private chat."
+    return "Permohonan cuti hanya boleh dibuat dalam kumpulan pekerja yang ditetapkan atau melalui chat peribadi."
 
 
 def registered_workers_only_text() -> str:
-    return "Only registered workers can use this function."
+    return "Fungsi ini hanya untuk pekerja yang telah berdaftar."
