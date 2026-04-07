@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(python -c 'import uvicorn')",
+      "Bash(where python:*)",
+      "Bash(C:UsersezzuaAppDataLocalPythonbinpython.exe -c \"import uvicorn; print\\(''''ok''''\\)\")",
+      "Bash(C:UsersezzuaAppDataLocalPythonbinpython.exe -m pip show uvicorn)",
+      "Bash(C:UsersezzuaAppDataLocalPythonbinpython.exe -m pip install -r requirements.txt)",
+      "Read(//c/Users/ezzua/AppData/Local/Python/bin//**)",
+      "Read(//c/Users/ezzua/AppData/Local/Programs/**)",
+      "Read(//c/Users/ezzua/**)",
+      "Bash(/c/Users/ezzua/AppData/Local/Python/bin/python.exe -m pip install -r requirements.txt)"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Attendance System (Web + Bot)",
+      "runtimeExecutable": "C:\\Users\\ezzua\\AppData\\Local\\Python\\bin\\python.exe",
+      "runtimeArgs": ["main.py"],
+      "port": 8000
+    },
+    {
+      "name": "Web Only (uvicorn)",
+      "runtimeExecutable": "uvicorn",
+      "runtimeArgs": ["web.app:create_app", "--factory", "--port", "8000", "--reload"],
+      "port": 8000
+    }
+  ]
+}

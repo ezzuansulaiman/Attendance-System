@@ -272,7 +272,7 @@ def _build_summary_sheet(report: dict[str, Any]) -> str:
         rows=rows,
         column_widths=[24, 30, 4, 16, 30],
         merges=["A1:E1"],
-        last_row=row_index - 1,
+        last_row=row_index,
         last_column=last_column,
     )
 
