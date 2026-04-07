@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from fastapi.testclient import TestClient
 
 from web.app import create_app
@@ -37,7 +39,14 @@ def test_monthly_pdf_report_download_route_returns_attachment() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
-    assert 'attachment; filename="attendance-2026-04.pdf"' in response.headers["content-disposition"]
+    assert re.search(
+        r'attachment; filename="attendance-2026-04-\d{8}-\d{6}\.pdf"',
+        response.headers["content-disposition"],
+    )
+    assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
+    assert response.headers["pragma"] == "no-cache"
+    assert response.headers["expires"] == "0"
+    assert response.headers["x-content-type-options"] == "nosniff"
     assert response.content.startswith(b"%PDF")
 
 
@@ -49,5 +58,12 @@ def test_monthly_excel_report_download_route_returns_attachment() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    assert 'attachment; filename="attendance-2026-04.xlsx"' in response.headers["content-disposition"]
+    assert re.search(
+        r'attachment; filename="attendance-2026-04-\d{8}-\d{6}\.xlsx"',
+        response.headers["content-disposition"],
+    )
+    assert response.headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
+    assert response.headers["pragma"] == "no-cache"
+    assert response.headers["expires"] == "0"
+    assert response.headers["x-content-type-options"] == "nosniff"
     assert response.content.startswith(b"PK")

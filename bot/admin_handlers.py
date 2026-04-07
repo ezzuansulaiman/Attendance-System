@@ -20,8 +20,11 @@ from services.leave_service import (
     list_pending_leave_requests,
     reject_leave_request,
 )
-from services.report_service import generate_monthly_attendance_excel
-from services.report_service import generate_monthly_attendance_pdf
+from services.report_service import (
+    build_report_download_filename,
+    generate_monthly_attendance_excel,
+    generate_monthly_attendance_pdf,
+)
 
 router = Router()
 settings = get_settings()
@@ -103,7 +106,7 @@ async def send_current_month_report(callback: CallbackQuery) -> None:
             month=today.month,
         )
 
-    filename = f"attendance-{today.year}-{today.month:02d}.pdf"
+    filename = build_report_download_filename(year=today.year, month=today.month, extension="pdf")
     month_name = calendar.month_name[today.month]
     await callback.message.answer_document(
         BufferedInputFile(pdf_bytes, filename=filename),
@@ -126,7 +129,7 @@ async def send_current_month_excel(callback: CallbackQuery) -> None:
             month=today.month,
         )
 
-    filename = f"attendance-{today.year}-{today.month:02d}.xlsx"
+    filename = build_report_download_filename(year=today.year, month=today.month, extension="xlsx")
     month_name = calendar.month_name[today.month]
     await callback.message.answer_document(
         BufferedInputFile(excel_bytes, filename=filename),

@@ -14,6 +14,12 @@ from services.excel_generator import build_monthly_attendance_excel as render_mo
 from services.pdf_generator import build_monthly_attendance_pdf as render_monthly_attendance_pdf
 
 
+def build_report_download_filename(*, year: int, month: int, extension: str) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    normalized_extension = extension.lstrip(".")
+    return f"attendance-{year}-{month:02d}-{timestamp}.{normalized_extension}"
+
+
 def _site_name(worker: Worker) -> str:
     return worker.site.name if worker.site else "Unassigned"
 

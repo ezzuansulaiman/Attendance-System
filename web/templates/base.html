@@ -621,8 +621,8 @@
                     <a href="{{ request.url_for('workers') }}" class="{% if request.url.path.startswith(request.url_for('workers').path) %}is-active{% endif %}">Workers</a>
                     <a href="{{ request.url_for('attendance') }}" class="{% if request.url.path.startswith(request.url_for('attendance').path) %}is-active{% endif %}">Attendance</a>
                     <a href="{{ request.url_for('leaves') }}" class="{% if request.url.path.startswith(request.url_for('leaves').path) %}is-active{% endif %}">Leaves</a>
-                    <a href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}" download target="_blank" rel="noopener">PDF</a>
-                    <a href="{{ request.url_for('monthly_report_excel') }}?year={{ current_year() }}&month={{ current_month() }}" download target="_blank" rel="noopener">Excel</a>
+                    <a href="{{ request.url_for('monthly_report') }}?year={{ current_year() }}&month={{ current_month() }}">PDF</a>
+                    <a href="{{ request.url_for('monthly_report_excel') }}?year={{ current_year() }}&month={{ current_month() }}">Excel</a>
                 </div>
                 <form method="post" action="{{ request.url_for('logout') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">

@@ -58,6 +58,8 @@ def test_dashboard_template_renders_primary_actions() -> None:
     assert "Manage Attendance" in html
     assert "Current Excel" in html
     assert "/leaves/1/approve" in html
+    assert 'target="_blank"' not in html
+    assert ' download' not in html
 
 
 def test_attendance_template_renders_submission_actions() -> None:
@@ -79,6 +81,8 @@ def test_attendance_template_renders_submission_actions() -> None:
     assert "Submission Excel" in html
     assert "/reports/monthly" in html
     assert "site_id=1" in html
+    assert 'target="_blank"' not in html
+    assert ' download' not in html
 
 
 def test_workers_sites_and_leaves_templates_render_navigation_actions() -> None:
