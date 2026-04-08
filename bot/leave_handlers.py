@@ -41,10 +41,10 @@ LEAVE_BACK_CALLBACK = "leave:back"
 LEAVE_CANCEL_CALLBACK = "leave:cancel"
 
 
-async def _submit_leave_request(message: Message, state: FSMContext) -> None:
+async def _submit_leave_request(message: Message, state: FSMContext, *, telegram_user_id: int) -> None:
     data = await state.get_data()
     async with session_scope() as session:
-        worker = await get_worker_by_telegram_id(session, message.from_user.id, active_only=False)
+        worker = await get_worker_by_telegram_id(session, telegram_user_id, active_only=False)
         if not worker:
             await message.answer(registered_workers_only_text())
             await state.clear()
@@ -385,7 +385,7 @@ async def confirm_leave_request(callback: CallbackQuery, state: FSMContext) -> N
     if await state.get_state() != LeaveApplicationStates.confirmation.state:
         await callback.message.answer("Permohonan ini sudah tidak aktif. Sila mulakan semula dari menu.")
         return
-    await _submit_leave_request(callback.message, state)
+    await _submit_leave_request(callback.message, state, telegram_user_id=callback.from_user.id)
 
 
 @router.callback_query(F.data == LEAVE_BACK_CALLBACK)
