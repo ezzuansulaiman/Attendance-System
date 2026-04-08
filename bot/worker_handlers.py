@@ -9,9 +9,10 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.context import (
     attendance_restriction_text,
+    inactive_worker_text,
     is_admin,
     leave_restriction_text,
-    load_registered_worker,
+    load_worker_access,
     local_tz,
     registered_workers_only_text,
     worker_group_restriction_text,
@@ -46,7 +47,6 @@ from services.attendance_service import (
     check_out,
     get_approved_leave_for_day,
     get_attendance_for_date,
-    get_worker_by_telegram_id,
     self_register_worker,
 )
 from services.leave_service import leave_is_partial_day, leave_label, leave_status_label, list_leave_requests_for_worker
@@ -117,7 +117,11 @@ async def _step_back_in_registration_flow(message: Message, state: FSMContext) -
 @router.message(F.text.func(is_worker_menu_alias))
 async def show_menu(message: Message, state: FSMContext) -> None:
     await state.clear()
-    worker = await load_registered_worker(message.from_user.id)
+    worker_access = await load_worker_access(message.from_user.id)
+    if worker_access.is_inactive:
+        await message.answer(inactive_worker_text())
+        return
+    worker = worker_access.worker
     if not worker_chat_is_allowed(worker, message) and not is_admin(message.from_user.id):
         await message.answer(worker_group_restriction_text())
         return
@@ -143,7 +147,11 @@ async def show_menu(message: Message, state: FSMContext) -> None:
 @router.message(F.text == WORKER_MENU_BUTTON)
 async def show_worker_menu_from_text_button(message: Message, state: FSMContext) -> None:
     await state.clear()
-    worker = await load_registered_worker(message.from_user.id)
+    worker_access = await load_worker_access(message.from_user.id)
+    if worker_access.is_inactive:
+        await message.answer(inactive_worker_text())
+        return
+    worker = worker_access.worker
     if not worker:
         await message.answer(registered_workers_only_text())
         return
@@ -162,15 +170,19 @@ async def show_worker_menu_from_text_button(message: Message, state: FSMContext)
 @router.callback_query(F.data.in_({"attendance:checkin", "attendance:checkout"}))
 async def handle_attendance_action(callback: CallbackQuery) -> None:
     await callback.answer()
-    async with session_scope() as session:
-        worker = await get_worker_by_telegram_id(session, callback.from_user.id)
-        if not worker:
-            await callback.message.answer(registered_workers_only_text())
-            return
-        if not worker_chat_is_allowed(worker, callback):
-            await callback.message.answer(attendance_restriction_text())
-            return
+    worker_access = await load_worker_access(callback.from_user.id)
+    if worker_access.is_inactive:
+        await callback.message.answer(inactive_worker_text())
+        return
+    worker = worker_access.worker
+    if not worker:
+        await callback.message.answer(registered_workers_only_text())
+        return
+    if not worker_chat_is_allowed(worker, callback):
+        await callback.message.answer(attendance_restriction_text())
+        return
 
+    async with session_scope() as session:
         try:
             now = datetime.now(local_tz)
             if callback.data.endswith("checkin"):
@@ -201,15 +213,19 @@ async def handle_attendance_action(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "worker:status")
 async def show_worker_status(callback: CallbackQuery) -> None:
     await callback.answer()
-    async with session_scope() as session:
-        worker = await get_worker_by_telegram_id(session, callback.from_user.id)
-        if not worker:
-            await callback.message.answer(registered_workers_only_text())
-            return
-        if not worker_chat_is_allowed(worker, callback):
-            await callback.message.answer(attendance_restriction_text())
-            return
+    worker_access = await load_worker_access(callback.from_user.id)
+    if worker_access.is_inactive:
+        await callback.message.answer(inactive_worker_text())
+        return
+    worker = worker_access.worker
+    if not worker:
+        await callback.message.answer(registered_workers_only_text())
+        return
+    if not worker_chat_is_allowed(worker, callback):
+        await callback.message.answer(attendance_restriction_text())
+        return
 
+    async with session_scope() as session:
         today = datetime.now(local_tz).date()
         attendance = await get_attendance_for_date(session, worker_id=worker.id, attendance_date=today)
         approved_leave = await get_approved_leave_for_day(session, worker_id=worker.id, target_date=today)
@@ -240,8 +256,11 @@ async def show_worker_status(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "worker:profile")
 async def show_worker_profile(callback: CallbackQuery) -> None:
     await callback.answer()
-    async with session_scope() as session:
-        worker = await get_worker_by_telegram_id(session, callback.from_user.id)
+    worker_access = await load_worker_access(callback.from_user.id)
+    if worker_access.is_inactive:
+        await callback.message.answer(inactive_worker_text())
+        return
+    worker = worker_access.worker
     if not worker:
         await callback.message.answer(registered_workers_only_text())
         return
@@ -264,14 +283,19 @@ async def show_worker_profile(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == "worker:leaves")
 async def show_worker_leave_history(callback: CallbackQuery) -> None:
     await callback.answer()
+    worker_access = await load_worker_access(callback.from_user.id)
+    if worker_access.is_inactive:
+        await callback.message.answer(inactive_worker_text())
+        return
+    worker = worker_access.worker
+    if not worker:
+        await callback.message.answer(registered_workers_only_text())
+        return
+    if not worker_chat_is_allowed(worker, callback):
+        await callback.message.answer(leave_restriction_text())
+        return
+
     async with session_scope() as session:
-        worker = await get_worker_by_telegram_id(session, callback.from_user.id)
-        if not worker:
-            await callback.message.answer(registered_workers_only_text())
-            return
-        if not worker_chat_is_allowed(worker, callback):
-            await callback.message.answer(leave_restriction_text())
-            return
         leave_items = await list_leave_requests_for_worker(session, worker_id=worker.id, limit=5)
 
     entries = [

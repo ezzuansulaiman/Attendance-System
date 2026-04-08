@@ -172,8 +172,12 @@ async def _review_leave(callback: CallbackQuery, *, approve: bool) -> None:
             await callback.message.answer(str(exc))
             return
 
-    action = "approved" if approve else "rejected"
-    action_label = "diluluskan" if approve else "ditolak"
+    if leave_request.status == "approved":
+        action_label = "diluluskan"
+    elif approve:
+        action_label = "ditolak automatik"
+    else:
+        action_label = "ditolak"
     await callback.message.answer(f"Permohonan cuti #{leave_request.id} telah {action_label}.")
     await send_leave_review_to_worker(callback.bot, leave_request.id)
 

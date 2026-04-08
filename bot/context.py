@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional, Union
 
 from aiogram.types import CallbackQuery, Message
@@ -12,6 +13,12 @@ from services.attendance_service import get_worker_by_telegram_id
 settings = get_settings()
 local_tz = settings.local_timezone
 TelegramEvent = Union[Message, CallbackQuery]
+
+
+@dataclass(frozen=True)
+class WorkerAccess:
+    worker: Optional[Worker]
+    is_inactive: bool = False
 
 
 def is_admin(user_id: int) -> bool:
@@ -43,9 +50,14 @@ def worker_chat_is_allowed(worker: Optional[Worker], event: TelegramEvent) -> bo
     return False
 
 
-async def load_registered_worker(telegram_user_id: int):
+async def load_worker_access(telegram_user_id: int) -> WorkerAccess:
     async with session_scope() as session:
-        return await get_worker_by_telegram_id(session, telegram_user_id)
+        worker = await get_worker_by_telegram_id(session, telegram_user_id, active_only=False)
+    if not worker:
+        return WorkerAccess(worker=None, is_inactive=False)
+    if worker.is_active is False:
+        return WorkerAccess(worker=None, is_inactive=True)
+    return WorkerAccess(worker=worker, is_inactive=False)
 
 
 def worker_group_restriction_text() -> str:
@@ -62,3 +74,7 @@ def leave_restriction_text() -> str:
 
 def registered_workers_only_text() -> str:
     return "Fungsi ini hanya untuk pekerja yang telah berdaftar."
+
+
+def inactive_worker_text() -> str:
+    return "Rekod anda wujud dalam sistem tetapi akaun pekerja ini sedang tidak aktif. Sila hubungi admin."

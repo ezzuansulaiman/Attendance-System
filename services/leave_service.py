@@ -115,9 +115,35 @@ def annual_leave_notice_text() -> str:
     return f"Permohonan Cuti Tahunan perlu dibuat sekurang-kurangnya {days} hari sebelum tarikh mula."
 
 
+def annual_leave_auto_reject_text() -> str:
+    days = annual_leave_notice_days()
+    if days == 1:
+        return "Ditolak automatik kerana permohonan Cuti Tahunan dibuat kurang daripada 1 hari sebelum tarikh mula."
+    return f"Ditolak automatik kerana permohonan Cuti Tahunan dibuat kurang daripada {days} hari sebelum tarikh mula."
+
+
 def _clean_notes(value: Optional[str]) -> Optional[str]:
     cleaned = (value or "").strip()
     return cleaned or None
+
+
+def _today_local_date() -> date:
+    return datetime.now(settings.local_timezone).date()
+
+
+def _annual_leave_notice_met(*, leave_type: str, start_date: date, reference_date: Optional[date] = None) -> bool:
+    if leave_type != "annual":
+        return True
+    notice_days = annual_leave_notice_days()
+    if not notice_days:
+        return True
+    effective_reference_date = reference_date or _today_local_date()
+    return (start_date - effective_reference_date).days >= notice_days
+
+
+def _validate_annual_leave_notice(*, leave_type: str, start_date: date, reference_date: Optional[date] = None) -> None:
+    if not _annual_leave_notice_met(leave_type=leave_type, start_date=start_date, reference_date=reference_date):
+        raise LeaveError(annual_leave_notice_text())
 
 
 def _validated_day_portion(*, day_portion: Optional[str], start_date: date, end_date: date) -> str:
@@ -171,11 +197,7 @@ async def create_leave_request(
         start_date=start_date,
         end_date=end_date,
     )
-    if leave_type == "annual":
-        today = datetime.now(settings.local_timezone).date()
-        notice_days = annual_leave_notice_days()
-        if notice_days and (start_date - today).days < notice_days:
-            raise LeaveError(annual_leave_notice_text())
+    _validate_annual_leave_notice(leave_type=leave_type, start_date=start_date)
     existing_request_result = await session.execute(
         select(LeaveRequest).where(
             LeaveRequest.worker_id == worker.id,
@@ -338,6 +360,17 @@ async def approve_leave_request(
     admin_telegram_id: int,
     notes: Optional[str] = None,
 ) -> LeaveRequest:
+    if not _annual_leave_notice_met(
+        leave_type=leave_request.leave_type,
+        start_date=leave_request.start_date,
+    ):
+        return await _review_leave_request(
+            session,
+            leave_request=leave_request,
+            admin_telegram_id=admin_telegram_id,
+            status="rejected",
+            notes=annual_leave_auto_reject_text(),
+        )
     return await _review_leave_request(
         session,
         leave_request=leave_request,

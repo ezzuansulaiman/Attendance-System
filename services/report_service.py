@@ -4,7 +4,7 @@ import calendar
 from datetime import date, datetime
 from typing import Any, Optional
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,6 +16,10 @@ from services.leave_service import approved_leaves_in_range, leave_is_partial_da
 from services.pdf_generator import build_monthly_attendance_pdf as render_monthly_attendance_pdf
 from services.public_holiday_service import list_public_holidays_in_range
 from services.site_service import get_default_site
+
+
+def _active_worker_clause():
+    return or_(Worker.is_active.is_(True), Worker.is_active.is_(None))
 
 
 def build_report_download_filename(*, year: int, month: int, extension: str) -> str:
@@ -256,7 +260,7 @@ async def build_monthly_attendance_report(
     workers_query = (
         select(Worker)
         .options(selectinload(Worker.site))
-        .where(Worker.is_active.is_(True))
+        .where(_active_worker_clause())
         .order_by(Worker.full_name)
     )
     if resolved_site_id:

@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -26,6 +26,11 @@ def _clean_optional_text(value: Optional[str]) -> Optional[str]:
 
 def _worker_lookup_query(telegram_user_id: int) -> Select[tuple[Worker]]:
     return select(Worker).options(selectinload(Worker.site)).where(Worker.telegram_user_id == telegram_user_id)
+
+
+def _active_worker_clause():
+    # Legacy rows may carry NULL in is_active; treat them as active until normalized.
+    return or_(Worker.is_active.is_(True), Worker.is_active.is_(None))
 
 
 def _attendance_lookup_query(worker_id: int, attendance_date: date) -> Select[tuple[AttendanceRecord]]:
@@ -52,7 +57,7 @@ async def get_worker_by_telegram_id(
 ) -> Optional[Worker]:
     query = _worker_lookup_query(telegram_user_id)
     if active_only:
-        query = query.where(Worker.is_active.is_(True))
+        query = query.where(_active_worker_clause())
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
@@ -76,7 +81,7 @@ async def list_active_workers(session: AsyncSession, *, site_id: Optional[int] =
     query = (
         select(Worker)
         .options(selectinload(Worker.site))
-        .where(Worker.is_active.is_(True))
+        .where(_active_worker_clause())
         .order_by(Worker.full_name)
     )
     if site_id:
@@ -391,7 +396,7 @@ async def get_dashboard_summary(
     target_date: date,
     site_id: Optional[int] = None,
 ) -> dict[str, int]:
-    worker_query = select(func.count()).select_from(Worker).where(Worker.is_active.is_(True))
+    worker_query = select(func.count()).select_from(Worker).where(_active_worker_clause())
     if site_id:
         worker_query = worker_query.where(Worker.site_id == site_id)
     total_workers = await session.scalar(worker_query)

@@ -12,10 +12,43 @@ from bot.keyboards import leave_review_keyboard
 from bot.messages import build_attendance_sync_text, build_leave_review_text, build_leave_summary_text
 from config import get_settings
 from models import session_scope
-from services.leave_service import get_leave_request
+from services.leave_service import get_leave_request, leave_requires_photo
 from services.site_service import get_site_by_id, list_sites
 
 logger = logging.getLogger(__name__)
+
+
+def _leave_group_chat_id(leave_request: object, fallback_group_id: int | None) -> int | None:
+    worker = getattr(leave_request, "worker", None)
+    site = getattr(worker, "site", None)
+    site_group_id = getattr(site, "telegram_group_id", None)
+    if site_group_id is not None:
+        return int(site_group_id)
+    return fallback_group_id
+
+
+async def _send_leave_request_to_group(bot: Bot, *, leave_request: object, text: str, fallback_group_id: int | None) -> None:
+    if not leave_requires_photo(getattr(leave_request, "leave_type", "")):
+        return
+
+    group_chat_id = _leave_group_chat_id(leave_request, fallback_group_id)
+    telegram_file_id = getattr(leave_request, "telegram_file_id", None)
+    if group_chat_id is None or not telegram_file_id:
+        return
+
+    group_text = (
+        "<b>Makluman Permohonan Cuti</b>\n"
+        "Bukti sokongan dilampirkan di sini bersama alasan.\n\n"
+        f"{text}"
+    )
+    try:
+        await bot.send_photo(
+            chat_id=group_chat_id,
+            photo=telegram_file_id,
+            caption=group_text,
+        )
+    except Exception:
+        logger.exception("Failed to send leave request %s to worker group %s.", getattr(leave_request, "id", "?"), group_chat_id)
 
 
 async def send_leave_request_to_admins(bot: Bot, leave_request_id: int) -> None:
@@ -52,6 +85,13 @@ async def send_leave_request_to_admins(bot: Bot, leave_request_id: int) -> None:
                     )
             except Exception:
                 logger.exception("Failed to send leave request %s to admin %s.", leave_request.id, admin_id)
+
+        await _send_leave_request_to_group(
+            bot,
+            leave_request=leave_request,
+            text=text,
+            fallback_group_id=settings.group_id,
+        )
 
 
 async def send_leave_review_to_worker(bot: Bot, leave_request_id: int) -> None:

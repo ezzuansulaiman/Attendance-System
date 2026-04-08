@@ -5,9 +5,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.context import (
+    inactive_worker_text,
     leave_restriction_text,
-    load_registered_worker,
+    load_worker_access,
     registered_workers_only_text,
+    worker_group_id,
     worker_chat_is_allowed,
 )
 from bot.keyboards import (
@@ -31,6 +33,7 @@ from services.leave_service import (
     is_supported_leave_day_portion,
     is_supported_leave_type,
     leave_label,
+    leave_requires_photo,
 )
 
 router = Router()
@@ -41,9 +44,13 @@ LEAVE_CANCEL_CALLBACK = "leave:cancel"
 async def _submit_leave_request(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     async with session_scope() as session:
-        worker = await get_worker_by_telegram_id(session, message.from_user.id)
+        worker = await get_worker_by_telegram_id(session, message.from_user.id, active_only=False)
         if not worker:
             await message.answer(registered_workers_only_text())
+            await state.clear()
+            return
+        if worker.is_active is False:
+            await message.answer(inactive_worker_text())
             await state.clear()
             return
 
@@ -94,12 +101,23 @@ async def _show_leave_day_portion_prompt(target: Message) -> None:
     )
 
 
+def _required_group_support_text() -> str:
+    return (
+        "Cuti Sakit dan Cuti Kecemasan memerlukan bukti sokongan di group site bersama alasan. "
+        "Sila hubungi admin jika group Telegram site anda belum ditetapkan."
+    )
+
+
 async def _show_leave_confirmation(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     async with session_scope() as session:
-        worker = await get_worker_by_telegram_id(session, message.from_user.id)
+        worker = await get_worker_by_telegram_id(session, message.from_user.id, active_only=False)
     if not worker:
         await message.answer(registered_workers_only_text())
+        await state.clear()
+        return
+    if worker.is_active is False:
+        await message.answer(inactive_worker_text())
         await state.clear()
         return
 
@@ -168,10 +186,10 @@ async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
         )
         return
     if current_state == LeaveApplicationStates.confirmation.state:
-        if data.get("leave_type") in {"mc", "emergency"}:
+        if leave_requires_photo(data.get("leave_type", "")):
             await state.set_state(LeaveApplicationStates.photo)
             await message.answer(
-                "Sila muat naik semula gambar sokongan. Hanya Telegram file_id akan disimpan.",
+                "Sila muat naik semula gambar sokongan. Bukti ini akan dihantar ke group site bersama alasan.",
                 reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
             )
             return
@@ -188,7 +206,11 @@ async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
 @router.callback_query(F.data == "leave:start")
 async def start_leave_flow(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
-    worker = await load_registered_worker(callback.from_user.id)
+    worker_access = await load_worker_access(callback.from_user.id)
+    if worker_access.is_inactive:
+        await callback.message.answer(inactive_worker_text())
+        return
+    worker = worker_access.worker
     if not worker:
         await callback.message.answer(registered_workers_only_text())
         return
@@ -208,6 +230,21 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
     if not is_supported_leave_type(leave_type):
         await callback.message.answer("Jenis cuti ini tidak disokong.")
         return
+    if leave_requires_photo(leave_type):
+        worker_access = await load_worker_access(callback.from_user.id)
+        if worker_access.is_inactive:
+            await callback.message.answer(inactive_worker_text())
+            await state.clear()
+            return
+        worker = worker_access.worker
+        if not worker:
+            await callback.message.answer(registered_workers_only_text())
+            await state.clear()
+            return
+        if worker_group_id(worker) is None:
+            await callback.message.answer(_required_group_support_text())
+            await state.clear()
+            return
 
     await state.update_data(leave_type=leave_type)
     await state.set_state(LeaveApplicationStates.start_date)
@@ -310,10 +347,10 @@ async def capture_reason(message: Message, state: FSMContext) -> None:
 
     data = await state.get_data()
     await state.update_data(reason=reason)
-    if data["leave_type"] in {"mc", "emergency"}:
+    if leave_requires_photo(data["leave_type"]):
         await state.set_state(LeaveApplicationStates.photo)
         await message.answer(
-            "Sila muat naik gambar sokongan sekarang. Hanya Telegram file_id akan disimpan.",
+            "Sila muat naik gambar sokongan sekarang. Bukti ini akan dihantar ke group site bersama alasan.",
             reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
         )
         return
@@ -336,7 +373,10 @@ async def prompt_photo_again(message: Message, state: FSMContext) -> None:
     if is_back_alias(message.text):
         await _step_back_in_leave_flow(message, state)
         return
-    await message.answer("Gambar sokongan diperlukan untuk Cuti Sakit dan Cuti Kecemasan. Sila muat naik imej.")
+    await message.answer(
+        "Gambar sokongan diperlukan untuk Cuti Sakit dan Cuti Kecemasan. "
+        "Sila muat naik imej supaya bukti boleh dilampirkan ke group site bersama alasan."
+    )
 
 
 @router.callback_query(F.data == "leave:confirm")

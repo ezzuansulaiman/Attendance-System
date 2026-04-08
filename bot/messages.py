@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from datetime_utils import format_local_datetime
-from services.leave_service import annual_leave_notice_text, leave_duration_days, leave_label
+from services.leave_service import annual_leave_notice_text, leave_duration_days, leave_label, leave_requires_photo
 
 
 def format_display_date(value: date) -> str:
@@ -38,7 +38,7 @@ def worker_menu_text() -> str:
         "Sila gunakan butang menu yang dipaparkan. Anda tidak perlu menaip <code>/menu</code>. Jika butang tidak muncul, taip <code>menu</code> sahaja.\n\n"
         "Pekerja yang berdaftar boleh merekod masuk, merekod keluar, semak status hari ini, melihat cuti sendiri, dan memohon cuti.\n"
         f"{annual_leave_notice_text()}\n"
-        "Untuk Cuti Sakit dan Cuti Kecemasan, anda akan diminta muat naik gambar sokongan. Hanya <code>file_id</code> Telegram akan disimpan."
+        "Untuk Cuti Sakit dan Cuti Kecemasan, anda akan diminta muat naik gambar sokongan. Bukti sokongan dan alasan akan dihantar ke group site untuk makluman."
     )
 
 
@@ -153,6 +153,9 @@ def build_leave_confirmation_text(
     has_supporting_photo: bool,
 ) -> str:
     document_line = "Ada" if has_supporting_photo else "Tiada"
+    group_notice = ""
+    if leave_requires_photo(leave_type):
+        group_notice = "\nMakluman Group: Bukti sokongan dan alasan akan dihantar ke group site."
     return (
         "<b>Sahkan Permohonan Cuti</b>\n"
         f"Pekerja: {worker_name}\n"
@@ -161,7 +164,8 @@ def build_leave_confirmation_text(
         f"Tempoh: {format_leave_duration(start_date=start_date, end_date=end_date, day_portion=day_portion)}\n"
         f"Sebab: {reason}\n"
         f"Dokumen Sokongan: {document_line}\n\n"
-        "Tekan <b>Sahkan</b> untuk menghantar permohonan."
+        f"Tekan <b>Sahkan</b> untuk menghantar permohonan."
+        f"{group_notice}"
     )
 
 

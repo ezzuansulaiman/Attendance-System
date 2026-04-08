@@ -5,11 +5,12 @@ from tempfile import TemporaryDirectory
 from zoneinfo import ZoneInfo
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from models.database import Base
 from models.models import AttendanceRecord, Site, Worker
-from services.attendance_service import AttendanceError, check_in, update_attendance_record
+from services.attendance_service import AttendanceError, check_in, get_worker_by_telegram_id, list_active_workers, update_attendance_record
 from services.leave_service import approve_leave_request, create_leave_request
 
 
@@ -38,6 +39,11 @@ def test_attendance_record_round_trip_keeps_malaysia_timezone_in_sqlite() -> Non
 def test_check_in_allows_approved_half_day_leave() -> None:
     with TemporaryDirectory(dir=Path.cwd()) as temp_dir:
         asyncio.run(_test_check_in_allows_approved_half_day_leave(Path(temp_dir)))
+
+
+def test_active_worker_lookup_treats_null_is_active_as_active() -> None:
+    with TemporaryDirectory(dir=Path.cwd()) as temp_dir:
+        asyncio.run(_test_active_worker_lookup_treats_null_is_active_as_active(Path(temp_dir)))
 
 
 async def _test_update_attendance_record_rejects_duplicate_target_without_deleting_original(tmp_path) -> None:
@@ -227,5 +233,73 @@ async def _test_check_in_allows_approved_half_day_leave(tmp_path) -> None:
             )
 
             assert record.check_in_at == datetime(2026, 4, 7, 8, 0, tzinfo=LOCAL_TZ)
+    finally:
+        await engine.dispose()
+
+
+async def _test_active_worker_lookup_treats_null_is_active_as_active(tmp_path) -> None:
+    database_path = tmp_path / "attendance-null-active.db"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{database_path.as_posix()}")
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    CREATE TABLE sites (
+                        id INTEGER PRIMARY KEY,
+                        name VARCHAR(120),
+                        code VARCHAR(30),
+                        telegram_group_id BIGINT,
+                        is_active BOOLEAN,
+                        created_at DATETIME
+                    )
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    CREATE TABLE workers (
+                        id INTEGER PRIMARY KEY,
+                        telegram_user_id BIGINT,
+                        full_name VARCHAR(150),
+                        ic_number VARCHAR(30),
+                        employee_code VARCHAR(50),
+                        site_id INTEGER,
+                        is_active BOOLEAN NULL,
+                        created_at DATETIME,
+                        updated_at DATETIME
+                    )
+                    """
+                )
+            )
+
+        async with session_factory() as session:
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO sites (id, name, code, is_active)
+                    VALUES (1, 'Legacy Site', 'LEG', 1)
+                    """
+                )
+            )
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO workers (id, telegram_user_id, full_name, site_id, is_active)
+                    VALUES (1, 818181, 'Legacy Worker', 1, NULL)
+                    """
+                )
+            )
+            await session.commit()
+
+            resolved_worker = await get_worker_by_telegram_id(session, 818181)
+            active_workers = await list_active_workers(session)
+
+            assert resolved_worker is not None
+            assert resolved_worker.full_name == "Legacy Worker"
+            assert [item.full_name for item in active_workers] == ["Legacy Worker"]
     finally:
         await engine.dispose()

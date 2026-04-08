@@ -160,6 +160,7 @@ async def init_database() -> None:
                 ("ic_number", "VARCHAR(30)"),
                 ("employee_code", "VARCHAR(50)"),
                 ("site_id", "INTEGER"),
+                ("is_active", "BOOLEAN DEFAULT 1"),
             ):
                 worker_names = await _sqlite_add_column_if_missing(
                     connection,
@@ -167,6 +168,16 @@ async def init_database() -> None:
                     column_names=worker_names,
                     column_name=column_name,
                     column_type=column_type,
+                )
+            if "is_active" in worker_names:
+                await connection.execute(
+                    text(
+                        """
+                        UPDATE workers
+                        SET is_active = 1
+                        WHERE is_active IS NULL
+                        """
+                    )
                 )
 
             leave_names = await _sqlite_column_names(connection, "leave_requests")
@@ -292,6 +303,23 @@ async def init_database() -> None:
                     """
                     ALTER TABLE workers
                     ADD COLUMN IF NOT EXISTS site_id INTEGER
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    ALTER TABLE workers
+                    ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    UPDATE workers
+                    SET is_active = TRUE
+                    WHERE is_active IS NULL
                     """
                 )
             )
