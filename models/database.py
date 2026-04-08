@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import logging
 
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
@@ -15,6 +16,7 @@ class Base(DeclarativeBase):
     pass
 
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 engine = create_async_engine(
@@ -68,6 +70,75 @@ async def _sqlite_add_column_if_missing(
 
     column_names.add(column_name)
     return column_names
+
+
+def _postgres_is_textual_date_type(data_type: str) -> bool:
+    return data_type.strip().lower() in {"text", "character varying", "character", "varchar", "bpchar"}
+
+
+def _postgres_text_value_expression(column_name: str) -> str:
+    return f"NULLIF(BTRIM(CAST({column_name} AS TEXT)), '')"
+
+
+def _postgres_safe_date_expression(column_name: str) -> str:
+    text_value_expression = _postgres_text_value_expression(column_name)
+    return (
+        "CASE "
+        f"WHEN {text_value_expression} ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$' "
+        f"THEN CAST({text_value_expression} AS DATE) "
+        "ELSE NULL END"
+    )
+
+
+async def _postgres_column_data_types(connection, table_name: str) -> dict[str, str]:
+    result = await connection.execute(
+        text(
+            """
+            SELECT column_name, data_type
+            FROM information_schema.columns
+            WHERE table_schema = current_schema() AND table_name = :table_name
+            """
+        ),
+        {"table_name": table_name},
+    )
+    return {row.column_name: row.data_type for row in result.fetchall()}
+
+
+async def _postgres_repair_public_holiday_date_type(connection) -> None:
+    column_types = await _postgres_column_data_types(connection, "public_holidays")
+    holiday_date_type = column_types.get("holiday_date")
+    if not holiday_date_type or not _postgres_is_textual_date_type(holiday_date_type):
+        return
+
+    safe_date_expression = _postgres_safe_date_expression("holiday_date")
+    invalid_value_count = await connection.execute(
+        text(
+            f"""
+            SELECT COUNT(*)
+            FROM public_holidays
+            WHERE CAST(holiday_date AS TEXT) IS NOT NULL
+              AND {safe_date_expression} IS NULL
+            """
+        )
+    )
+    invalid_count = int(invalid_value_count.scalar_one() or 0)
+    if invalid_count:
+        logger.warning(
+            "Skipped automatic repair for public_holidays.holiday_date because %s rows contain non-ISO date text.",
+            invalid_count,
+        )
+        return
+
+    await connection.execute(
+        text(
+            f"""
+            ALTER TABLE public_holidays
+            ALTER COLUMN holiday_date TYPE DATE
+            USING {safe_date_expression}
+            """
+        )
+    )
+    logger.info("Repaired public_holidays.holiday_date from %s to DATE.", holiday_date_type)
 
 
 async def init_database() -> None:
@@ -245,6 +316,7 @@ async def init_database() -> None:
                         """
                     )
                 )
+            await _postgres_repair_public_holiday_date_type(connection)
             pg_columns = await connection.execute(
                 text(
                     """

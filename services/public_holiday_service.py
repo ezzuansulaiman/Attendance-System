@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy import or_, select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,7 +34,7 @@ def _coerce_holiday_date(value: object) -> date:
     return date.fromisoformat(str(value))
 
 
-def _is_legacy_public_holiday_schema_error(exc: OperationalError) -> bool:
+def _is_legacy_public_holiday_schema_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return any(
         marker in message
@@ -53,7 +53,24 @@ def _is_legacy_public_holiday_schema_error(exc: OperationalError) -> bool:
             "column \"notes\" does not exist",
             "column \"created_at\" does not exist",
             "relation \"public_holidays\" does not exist",
+            "operator does not exist: text >= date",
+            "operator does not exist: text <= date",
+            "operator does not exist: text = date",
+            "operator does not exist: date = text",
         )
+    )
+
+
+def _legacy_public_holiday_date_expression(*, dialect: str, column_name: str = "holiday_date") -> str:
+    if dialect != "postgresql":
+        return column_name
+
+    text_value_expression = f"NULLIF(BTRIM(CAST({column_name} AS TEXT)), '')"
+    return (
+        "CASE "
+        f"WHEN {text_value_expression} ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$' "
+        f"THEN CAST({text_value_expression} AS DATE) "
+        "ELSE NULL END"
     )
 
 
@@ -85,10 +102,11 @@ async def _list_legacy_public_holidays_in_range(
     if not {"id", "name", "holiday_date"}.issubset(column_names):
         return []
 
+    holiday_date_expression = _legacy_public_holiday_date_expression(dialect=dialect)
     select_expressions = {
         "id": "id",
         "name": "name",
-        "holiday_date": "holiday_date",
+        "holiday_date": f"{holiday_date_expression} AS holiday_date",
         "site_id": "site_id" if "site_id" in column_names else "NULL AS site_id",
         "notes": "notes" if "notes" in column_names else "NULL AS notes",
         "created_at": "created_at" if "created_at" in column_names else "NULL AS created_at",
@@ -100,13 +118,13 @@ async def _list_legacy_public_holidays_in_range(
                 SELECT {select_expressions["id"]}, {select_expressions["name"]}, {select_expressions["holiday_date"]},
                        {select_expressions["site_id"]}, {select_expressions["notes"]}, {select_expressions["created_at"]}
                 FROM public_holidays
-                WHERE holiday_date >= :start_date AND holiday_date <= :end_date
-                ORDER BY holiday_date ASC, name ASC
+                WHERE {holiday_date_expression} >= :start_date AND {holiday_date_expression} <= :end_date
+                ORDER BY {holiday_date_expression} ASC, name ASC
                 """
             ),
             {"start_date": start_date, "end_date": end_date},
         )
-    except OperationalError as exc:
+    except (OperationalError, ProgrammingError) as exc:
         if _is_legacy_public_holiday_schema_error(exc):
             return []
         raise
@@ -116,7 +134,7 @@ async def _list_legacy_public_holidays_in_range(
             id=row.id,
             name=row.name,
             holiday_date=_coerce_holiday_date(row.holiday_date),
-            site_id=None,
+            site_id=row.site_id,
             notes=row.notes,
             created_at=row.created_at,
             site=None,
@@ -129,13 +147,19 @@ async def _get_legacy_public_holiday_for_date(
     session: AsyncSession,
     *,
     target_date: date,
+    site_id: Optional[int],
 ) -> Optional[object]:
     legacy_rows = await _list_legacy_public_holidays_in_range(
         session,
         start_date=target_date,
         end_date=target_date,
     )
-    return next(iter(legacy_rows), None)
+    if site_id is None:
+        return next((row for row in legacy_rows if row.site_id is None), None)
+    return next((row for row in legacy_rows if row.site_id == site_id), None) or next(
+        (row for row in legacy_rows if row.site_id is None),
+        None,
+    )
 
 
 async def get_public_holiday(session: AsyncSession, holiday_id: int) -> Optional[PublicHoliday]:
@@ -165,10 +189,10 @@ async def get_public_holiday_for_date(
         query = query.where(or_(PublicHoliday.site_id == site_id, PublicHoliday.site_id.is_(None)))
     try:
         result = await session.execute(query)
-    except OperationalError as exc:
+    except (OperationalError, ProgrammingError) as exc:
         if _is_legacy_public_holiday_schema_error(exc):
             await session.rollback()
-            return await _get_legacy_public_holiday_for_date(session, target_date=target_date)
+            return await _get_legacy_public_holiday_for_date(session, target_date=target_date, site_id=site_id)
         raise
     return result.scalars().first()
 
@@ -189,7 +213,7 @@ async def list_public_holidays_in_range(
             )
             .order_by(PublicHoliday.holiday_date.asc(), PublicHoliday.name.asc())
         )
-    except OperationalError as exc:
+    except (OperationalError, ProgrammingError) as exc:
         if _is_legacy_public_holiday_schema_error(exc):
             await session.rollback()
             return await _list_legacy_public_holidays_in_range(session, start_date=start_date, end_date=end_date)

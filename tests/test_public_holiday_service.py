@@ -2,6 +2,7 @@ import asyncio
 from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -11,6 +12,9 @@ from models.models import Site
 from services.public_holiday_service import (
     create_public_holiday,
     delete_public_holiday,
+    _get_legacy_public_holiday_for_date,
+    _is_legacy_public_holiday_schema_error,
+    _legacy_public_holiday_date_expression,
     get_public_holiday_for_date,
     list_public_holidays_in_range,
     upsert_public_holiday_for_date,
@@ -194,3 +198,46 @@ async def _test_public_holiday_service_reads_minimal_legacy_table_shape(tmp_path
             assert listed[0].notes is None
     finally:
         await engine.dispose()
+
+
+def test_public_holiday_service_detects_postgres_text_date_mismatch_as_legacy_schema_error() -> None:
+    assert _is_legacy_public_holiday_schema_error(RuntimeError("operator does not exist: text >= date"))
+    assert _is_legacy_public_holiday_schema_error(RuntimeError("operator does not exist: text = date"))
+
+
+def test_legacy_public_holiday_date_expression_casts_postgres_text_values() -> None:
+    expression = _legacy_public_holiday_date_expression(dialect="postgresql")
+
+    assert "CAST" in expression
+    assert "AS DATE" in expression
+    assert "holiday_date" in expression
+
+
+def test_get_legacy_public_holiday_for_date_prefers_site_specific_match(monkeypatch) -> None:
+    async def _fake_list(*args, **kwargs):
+        return [
+            SimpleNamespace(id=1, name="Global", holiday_date=date(2026, 5, 1), site_id=None, notes=None, created_at=None),
+            SimpleNamespace(id=2, name="Site", holiday_date=date(2026, 5, 1), site_id=99, notes=None, created_at=None),
+        ]
+
+    monkeypatch.setattr("services.public_holiday_service._list_legacy_public_holidays_in_range", _fake_list)
+
+    resolved_site = asyncio.run(
+        _get_legacy_public_holiday_for_date(
+            SimpleNamespace(),
+            target_date=date(2026, 5, 1),
+            site_id=99,
+        )
+    )
+    resolved_global = asyncio.run(
+        _get_legacy_public_holiday_for_date(
+            SimpleNamespace(),
+            target_date=date(2026, 5, 1),
+            site_id=123,
+        )
+    )
+
+    assert resolved_site is not None
+    assert resolved_site.id == 2
+    assert resolved_global is not None
+    assert resolved_global.id == 1
