@@ -1,18 +1,35 @@
 from __future__ import annotations
 
 import calendar
-from datetime import datetime
+from datetime import date, datetime
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.types import BotCommand, BufferedInputFile, CallbackQuery, Message
 
 from bot.context import is_admin, local_tz
-from bot.keyboards import ADMIN_MENU_BUTTON, admin_menu_keyboard, is_admin_menu_alias, leave_review_keyboard
+from bot.keyboards import (
+    ADMIN_MENU_BUTTON,
+    admin_menu_keyboard,
+    admin_report_format_keyboard,
+    admin_report_month_keyboard,
+    admin_report_site_keyboard,
+    is_admin_menu_alias,
+    leave_review_keyboard,
+)
 from bot.notifications import send_leave_review_to_worker
-from bot.messages import admin_menu_text, build_leave_summary_text
+from bot.messages import (
+    admin_menu_text,
+    build_admin_report_format_picker_text,
+    build_admin_report_month_picker_text,
+    build_admin_report_site_picker_text,
+    build_admin_today_summary_text,
+    build_leave_summary_text,
+    build_monthly_report_summary_text,
+)
 from config import get_settings
 from models import session_scope
+from services.attendance_service import get_dashboard_summary
 from services.leave_service import (
     LeaveError,
     approve_leave_request,
@@ -23,9 +40,11 @@ from services.leave_service import (
 from services.pdf_generator import PdfExportError
 from services.report_service import (
     build_report_download_filename,
+    build_monthly_attendance_report,
     generate_monthly_attendance_excel,
     generate_monthly_attendance_pdf,
 )
+from services.site_service import get_site_by_id, list_sites
 
 router = Router()
 settings = get_settings()
@@ -36,6 +55,143 @@ async def send_admin_menu_message(message: Message) -> None:
     await message.answer(
         admin_menu_text(web_login_enabled=bool(settings.admin_web_login_url)),
         reply_markup=admin_menu_keyboard(web_login_url=settings.admin_web_login_url),
+    )
+
+
+async def _require_admin(callback: CallbackQuery) -> bool:
+    if not is_admin(callback.from_user.id):
+        await callback.message.answer("Akses pentadbir diperlukan.")
+        return False
+    return True
+
+
+def _today_local_date() -> date:
+    return datetime.now(local_tz).date()
+
+
+def _relative_month(reference_date: date, *, offset: int) -> tuple[int, int]:
+    month_index = (reference_date.year * 12 + reference_date.month - 1) + offset
+    year = month_index // 12
+    month = month_index % 12 + 1
+    return year, month
+
+
+def _report_period_label(*, year: int, month: int) -> str:
+    return f"{calendar.month_name[month]} {year}"
+
+
+async def _get_active_site(site_id: int):
+    async with session_scope() as session:
+        site = await get_site_by_id(session, site_id)
+    if not site or not site.is_active:
+        return None
+    return site
+
+
+async def _send_monthly_pdf(
+    callback: CallbackQuery,
+    *,
+    year: int,
+    month: int,
+    site_id: int | None = None,
+    site_name: str | None = None,
+) -> None:
+    try:
+        async with session_scope() as session:
+            pdf_bytes = await generate_monthly_attendance_pdf(
+                session,
+                year=year,
+                month=month,
+                site_id=site_id,
+            )
+    except PdfExportError:
+        await callback.message.answer(PDF_EXPORT_FAILURE_MESSAGE)
+        return
+
+    filename = build_report_download_filename(year=year, month=month, extension="pdf")
+    month_name = calendar.month_name[month]
+    caption = f"Laporan kehadiran {month_name} {year}."
+    if site_name:
+        caption = f"Laporan kehadiran {month_name} {year} untuk {site_name}."
+    await callback.message.answer_document(
+        BufferedInputFile(pdf_bytes, filename=filename),
+        caption=caption,
+    )
+
+
+async def _send_monthly_excel(
+    callback: CallbackQuery,
+    *,
+    year: int,
+    month: int,
+    site_id: int | None = None,
+    site_name: str | None = None,
+) -> None:
+    async with session_scope() as session:
+        excel_bytes = await generate_monthly_attendance_excel(
+            session,
+            year=year,
+            month=month,
+            site_id=site_id,
+        )
+
+    filename = build_report_download_filename(year=year, month=month, extension="xlsx")
+    month_name = calendar.month_name[month]
+    caption = f"Laporan Excel kehadiran {month_name} {year}."
+    if site_name:
+        caption = f"Laporan Excel kehadiran {month_name} {year} untuk {site_name}."
+    await callback.message.answer_document(
+        BufferedInputFile(excel_bytes, filename=filename),
+        caption=caption,
+    )
+
+
+async def _send_monthly_summary(
+    callback: CallbackQuery,
+    *,
+    year: int,
+    month: int,
+    site_id: int | None = None,
+) -> None:
+    async with session_scope() as session:
+        report = await build_monthly_attendance_report(session, year=year, month=month, site_id=site_id)
+
+    await callback.message.answer(
+        build_monthly_report_summary_text(
+            period_label=report["period_label"],
+            site_name=report["site_name"],
+            total_workers=report["summary"]["total_workers"],
+            total_present_days=report["summary"]["total_present_days"],
+            total_completed_days=report["summary"]["total_completed_days"],
+            average_present_days=report["summary"]["average_present_days"],
+            completion_rate=report["summary"]["completion_rate"],
+        )
+    )
+
+
+async def _show_custom_report_site_picker(callback: CallbackQuery) -> None:
+    async with session_scope() as session:
+        sites = list(await list_sites(session, active_only=True))
+
+    if not sites:
+        await callback.message.answer("Tiada site aktif ditemui untuk jana laporan.")
+        return
+
+    await callback.message.answer(
+        build_admin_report_site_picker_text(),
+        reply_markup=admin_report_site_keyboard(sites=sites),
+    )
+
+
+async def _show_custom_report_month_picker(callback: CallbackQuery, *, site_id: int, year: int) -> None:
+    site = await _get_active_site(site_id)
+    if not site:
+        await callback.message.answer("Site tidak ditemui atau tidak lagi aktif.")
+        return
+
+    await callback.message.answer(
+        build_admin_report_month_picker_text(site_name=site.name, year=year),
+        reply_markup=admin_report_month_keyboard(site_id=site.id, year=year),
     )
 
 
@@ -56,11 +212,18 @@ async def admin_menu_from_text_button(message: Message) -> None:
     await send_admin_menu_message(message)
 
 
+@router.callback_query(F.data == "admin:menu")
+async def admin_menu_from_callback(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+    await send_admin_menu_message(callback.message)
+
+
 @router.callback_query(F.data == "admin:pending")
 async def show_pending_leaves(callback: CallbackQuery) -> None:
     await callback.answer()
-    if not is_admin(callback.from_user.id):
-        await callback.message.answer("Akses pentadbir diperlukan.")
+    if not await _require_admin(callback):
         return
 
     async with session_scope() as session:
@@ -94,59 +257,183 @@ async def show_pending_leaves(callback: CallbackQuery) -> None:
         )
 
 
+@router.callback_query(F.data == "admin:report:custom")
+async def start_custom_report_flow(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+    await _show_custom_report_site_picker(callback)
+
+
+@router.callback_query(F.data.startswith("admin:report:custom:site:"))
+async def choose_custom_report_site(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+
+    site_id = int(callback.data.rsplit(":", 1)[-1])
+    await _show_custom_report_month_picker(callback, site_id=site_id, year=_today_local_date().year)
+
+
+@router.callback_query(F.data.startswith("admin:report:custom:year:"))
+async def choose_custom_report_year(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+
+    _, _, _, _, raw_site_id, raw_year = callback.data.split(":")
+    await _show_custom_report_month_picker(callback, site_id=int(raw_site_id), year=int(raw_year))
+
+
+@router.callback_query(F.data.startswith("admin:report:custom:month:"))
+async def choose_custom_report_month(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+
+    _, _, _, _, raw_site_id, raw_year, raw_month = callback.data.split(":")
+    site_id = int(raw_site_id)
+    year = int(raw_year)
+    month = int(raw_month)
+    if month < 1 or month > 12:
+        await callback.message.answer("Bulan laporan tidak sah.")
+        return
+
+    site = await _get_active_site(site_id)
+    if not site:
+        await callback.message.answer("Site tidak ditemui atau tidak lagi aktif.")
+        return
+
+    await callback.message.answer(
+        build_admin_report_format_picker_text(
+            site_name=site.name,
+            period_label=_report_period_label(year=year, month=month),
+        ),
+        reply_markup=admin_report_format_keyboard(site_id=site.id, year=year, month=month),
+    )
+
+
+@router.callback_query(F.data.startswith("admin:report:custom:run:"))
+async def run_custom_report(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+
+    _, _, _, _, raw_site_id, raw_year, raw_month, action = callback.data.split(":")
+    site_id = int(raw_site_id)
+    year = int(raw_year)
+    month = int(raw_month)
+    if month < 1 or month > 12:
+        await callback.message.answer("Bulan laporan tidak sah.")
+        return
+
+    site = await _get_active_site(site_id)
+    if not site:
+        await callback.message.answer("Site tidak ditemui atau tidak lagi aktif.")
+        return
+
+    if action == "summary":
+        await _send_monthly_summary(callback, year=year, month=month, site_id=site.id)
+        return
+    if action == "pdf":
+        await _send_monthly_pdf(callback, year=year, month=month, site_id=site.id, site_name=site.name)
+        return
+    if action == "excel":
+        await _send_monthly_excel(callback, year=year, month=month, site_id=site.id, site_name=site.name)
+        return
+
+    await callback.message.answer("Format laporan tidak sah.")
+
+
+@router.callback_query(F.data == "admin:report:today:summary")
+async def send_today_summary(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+
+    today = _today_local_date()
+    async with session_scope() as session:
+        summary = await get_dashboard_summary(session, target_date=today)
+
+    await callback.message.answer(
+        build_admin_today_summary_text(
+            target_date=today,
+            total_workers=summary["total_workers"],
+            checked_in=summary["checked_in"],
+            checked_out=summary["checked_out"],
+            pending_leaves=summary["pending_leaves"],
+        )
+    )
+
+
+@router.callback_query(F.data == "admin:report:current:summary")
+async def send_current_month_summary(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+
+    today = _today_local_date()
+    year, month = _relative_month(today, offset=0)
+    await _send_monthly_summary(callback, year=year, month=month)
+
+
+@router.callback_query(F.data == "admin:report:previous:summary")
+async def send_previous_month_summary(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+
+    today = _today_local_date()
+    year, month = _relative_month(today, offset=-1)
+    await _send_monthly_summary(callback, year=year, month=month)
+
+
 @router.callback_query(F.data == "admin:report:current")
 async def send_current_month_report(callback: CallbackQuery) -> None:
     await callback.answer()
-    if not is_admin(callback.from_user.id):
-        await callback.message.answer("Akses pentadbir diperlukan.")
+    if not await _require_admin(callback):
         return
 
-    today = datetime.now(local_tz).date()
-    try:
-        async with session_scope() as session:
-            pdf_bytes = await generate_monthly_attendance_pdf(
-                session,
-                year=today.year,
-                month=today.month,
-            )
-    except PdfExportError:
-        await callback.message.answer(PDF_EXPORT_FAILURE_MESSAGE)
+    today = _today_local_date()
+    year, month = _relative_month(today, offset=0)
+    await _send_monthly_pdf(callback, year=year, month=month)
+
+
+@router.callback_query(F.data == "admin:report:previous")
+async def send_previous_month_report(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
         return
 
-    filename = build_report_download_filename(year=today.year, month=today.month, extension="pdf")
-    month_name = calendar.month_name[today.month]
-    await callback.message.answer_document(
-        BufferedInputFile(pdf_bytes, filename=filename),
-        caption=f"Laporan kehadiran {month_name} {today.year}.",
-    )
+    today = _today_local_date()
+    year, month = _relative_month(today, offset=-1)
+    await _send_monthly_pdf(callback, year=year, month=month)
 
 
 @router.callback_query(F.data == "admin:report:current:excel")
 async def send_current_month_excel(callback: CallbackQuery) -> None:
     await callback.answer()
-    if not is_admin(callback.from_user.id):
-        await callback.message.answer("Akses pentadbir diperlukan.")
+    if not await _require_admin(callback):
         return
 
-    today = datetime.now(local_tz).date()
-    async with session_scope() as session:
-        excel_bytes = await generate_monthly_attendance_excel(
-            session,
-            year=today.year,
-            month=today.month,
-        )
+    today = _today_local_date()
+    year, month = _relative_month(today, offset=0)
+    await _send_monthly_excel(callback, year=year, month=month)
 
-    filename = build_report_download_filename(year=today.year, month=today.month, extension="xlsx")
-    month_name = calendar.month_name[today.month]
-    await callback.message.answer_document(
-        BufferedInputFile(excel_bytes, filename=filename),
-        caption=f"Laporan Excel kehadiran {month_name} {today.year}.",
-    )
+
+@router.callback_query(F.data == "admin:report:previous:excel")
+async def send_previous_month_excel(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+
+    today = _today_local_date()
+    year, month = _relative_month(today, offset=-1)
+    await _send_monthly_excel(callback, year=year, month=month)
 
 
 async def _review_leave(callback: CallbackQuery, *, approve: bool) -> None:
-    if not is_admin(callback.from_user.id):
-        await callback.message.answer("Akses pentadbir diperlukan.")
+    if not await _require_admin(callback):
         return
 
     leave_id = int(callback.data.rsplit(":", 1)[-1])

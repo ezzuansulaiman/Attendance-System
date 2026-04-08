@@ -58,9 +58,10 @@ router = Router()
 
 
 async def _send_navigation_menu(message: Message, *, show_worker_menu: bool, show_admin_menu: bool) -> None:
-    reply_markup = None
-    if message.chat.type == "private":
-        reply_markup = main_menu_keyboard(show_worker_menu=show_worker_menu, show_admin_menu=show_admin_menu)
+    reply_markup = main_menu_keyboard(
+        show_worker_menu=show_worker_menu,
+        show_admin_menu=show_admin_menu and message.chat.type == "private",
+    )
     if reply_markup:
         await message.answer(
             "Butang menu sudah dipaparkan di bawah. Pilih menu yang anda perlukan tanpa menaip command slash.",

@@ -13,3 +13,4 @@ attendance.db-wal
 *.sqlite3
 .DS_Store
 Thumbs.db
+.claude/worktrees/

@@ -86,7 +86,85 @@ def admin_menu_text(*, web_login_enabled: bool) -> str:
     return (
         "<b>Menu Admin</b>\n"
         "Sila gunakan butang menu yang dipaparkan. Anda tidak perlu menaip <code>/admin</code>. Jika butang tidak muncul, taip <code>admin</code> sahaja."
+        "\nAnda boleh semak cuti menunggu, lihat ringkasan Telegram, jana laporan ikut site dan bulan, atau muat turun laporan PDF dan Excel terus dari sini."
         f"{web_line}"
+    )
+
+
+def build_admin_report_site_picker_text() -> str:
+    return (
+        "<b>Laporan Ikut Site/Bulan</b>\n"
+        "Pilih site yang anda mahu gunakan untuk laporan Telegram ini."
+    )
+
+
+def build_admin_report_month_picker_text(*, site_name: str, year: int) -> str:
+    return (
+        "<b>Pilih Bulan Laporan</b>\n"
+        f"Site: {html.escape(site_name)}\n"
+        f"Tahun: {year}\n"
+        "Tekan bulan yang anda mahu jana."
+    )
+
+
+def build_admin_report_format_picker_text(*, site_name: str, period_label: str) -> str:
+    return (
+        "<b>Pilih Format Laporan</b>\n"
+        f"Site: {html.escape(site_name)}\n"
+        f"Tempoh: {html.escape(period_label)}\n"
+        "Pilih ringkasan Telegram, PDF, atau Excel."
+    )
+
+
+def _format_metric_value(value: float) -> str:
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:.1f}"
+
+
+def build_admin_today_summary_text(
+    *,
+    target_date: date,
+    total_workers: int,
+    checked_in: int,
+    checked_out: int,
+    pending_leaves: int,
+) -> str:
+    missing_check_in = max(total_workers - checked_in, 0)
+    pending_checkout = max(checked_in - checked_out, 0)
+    return (
+        "<b>Ringkasan Hari Ini</b>\n"
+        f"Tarikh: {format_display_date(target_date)}\n"
+        f"Jumlah pekerja aktif: {total_workers}\n"
+        f"Sudah rekod masuk: {checked_in}\n"
+        f"Sudah rekod keluar: {checked_out}\n"
+        f"Belum rekod masuk: {missing_check_in}\n"
+        f"Belum rekod keluar: {pending_checkout}\n"
+        f"Cuti menunggu semakan: {pending_leaves}"
+    )
+
+
+def build_monthly_report_summary_text(
+    *,
+    period_label: str,
+    site_name: str,
+    total_workers: int,
+    total_present_days: int,
+    total_completed_days: int,
+    average_present_days: float,
+    completion_rate: float,
+) -> str:
+    pending_checkout_days = max(total_present_days - total_completed_days, 0)
+    return (
+        "<b>Ringkasan Laporan Bulanan</b>\n"
+        f"Tempoh: {html.escape(period_label)}\n"
+        f"Skop: {html.escape(site_name)}\n"
+        f"Jumlah pekerja: {total_workers}\n"
+        f"Jumlah hari hadir: {total_present_days}\n"
+        f"Jumlah hari lengkap: {total_completed_days}\n"
+        f"Hari belum lengkap: {pending_checkout_days}\n"
+        f"Purata hari hadir seorang: {_format_metric_value(average_present_days)}\n"
+        f"Kadar lengkap: {_format_metric_value(completion_rate)}%"
     )
 
 
