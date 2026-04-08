@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from models.database import Base
-from models.models import AttendanceRecord, PublicHoliday, Site, Worker
+from models.models import AttendanceRecord, LeaveRequest, PublicHoliday, Site, Worker
 from services.report_service import build_monthly_attendance_report
 
 
@@ -54,9 +54,23 @@ async def _test_build_monthly_attendance_report_defaults_to_sepang_scope(tmp_pat
                         check_in_at=datetime(2026, 4, 1, 8, 0),
                     ),
                     AttendanceRecord(
+                        worker_id=sepang_worker.id,
+                        attendance_date=date(2026, 4, 3),
+                        check_in_at=datetime(2026, 4, 3, 8, 0),
+                    ),
+                    AttendanceRecord(
                         worker_id=klang_worker.id,
                         attendance_date=date(2026, 4, 1),
                         check_in_at=datetime(2026, 4, 1, 8, 30),
+                    ),
+                    LeaveRequest(
+                        worker_id=sepang_worker.id,
+                        leave_type="annual",
+                        day_portion="pm",
+                        start_date=date(2026, 4, 3),
+                        end_date=date(2026, 4, 3),
+                        reason="Half day annual leave",
+                        status="approved",
                     ),
                     PublicHoliday(
                         name="Labour Day",
@@ -81,7 +95,9 @@ async def _test_build_monthly_attendance_report_defaults_to_sepang_scope(tmp_pat
 
             assert report["site_name"] == "Sepang Region"
             assert [row["worker_name"] for row in report["rows"]] == ["Sepang Worker"]
-            assert [row["worker_name"] for row in report["detail_rows"]] == ["Sepang Worker"]
+            assert {row["worker_name"] for row in report["detail_rows"]} == {"Sepang Worker"}
             assert report["rows"][0]["days"][1] == "PH"
+            assert report["rows"][0]["days"][2] == "P/ALP"
+            assert any("Half day annual leave" in row["notes"] for row in report["detail_rows"])
     finally:
         await engine.dispose()

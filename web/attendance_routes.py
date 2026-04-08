@@ -31,7 +31,9 @@ from services.leave_service import (
     approved_leaves_in_range,
     delete_leave_request,
     leave_label,
+    leave_is_partial_day,
     leave_report_code,
+    normalize_leave_day_portion,
 )
 from services.public_holiday_service import (
     PublicHolidayError,
@@ -86,6 +88,26 @@ def _attendance_sync_payload(record: Optional[AttendanceRecord]) -> Optional[dic
     }
 
 
+def _attendance_record_symbol(record: AttendanceRecord) -> str:
+    if record.check_in_at and record.check_out_at:
+        return "P/C"
+    if record.check_in_at:
+        return "P"
+    if record.check_out_at:
+        return "OUT"
+    return "REC"
+
+
+def _attendance_record_summary(record: AttendanceRecord) -> str:
+    if record.check_in_at and record.check_out_at:
+        return f'{record.check_in_at.strftime("%H:%M")} - {record.check_out_at.strftime("%H:%M")}'
+    if record.check_in_at:
+        return f'IN {record.check_in_at.strftime("%H:%M")}'
+    if record.check_out_at:
+        return f'OUT {record.check_out_at.strftime("%H:%M")}'
+    return "Recorded attendance"
+
+
 async def _notify_worker_about_attendance_change(
     record: Optional[AttendanceRecord],
     *,
@@ -129,37 +151,45 @@ def _attendance_grid_cell(
     symbol = "-"
     time_summary = ""
     entry_mode = "attendance"
-    notes_value = record.notes if record and record.notes else ""
+    leave_day_portion = normalize_leave_day_portion(getattr(leave_request, "day_portion", None) if leave_request else None)
+    leave_reason_value = leave_request.reason if leave_request and leave_request.reason else ""
+    attendance_notes_value = record.notes if record and record.notes else ""
+    notes_value = leave_reason_value or attendance_notes_value
     leave_locked = False
     leave_message = ""
     leave_request_id = None
     public_holiday_id = None
 
-    if record and record.check_in_at and record.check_out_at:
-        status_label = "Complete"
-        status_class = "is-complete"
-        symbol = "P/C"
-        time_summary = f'{record.check_in_at.strftime("%H:%M")} - {record.check_out_at.strftime("%H:%M")}'
-    elif record and record.check_in_at:
-        status_label = "Checked in"
-        status_class = "is-present"
-        symbol = "P"
-        time_summary = f'IN {record.check_in_at.strftime("%H:%M")}'
-    elif record and record.check_out_at:
-        status_label = "Checked out"
-        status_class = "is-recorded"
-        symbol = "OUT"
-        time_summary = f'OUT {record.check_out_at.strftime("%H:%M")}'
-    elif record:
-        status_label = "Recorded"
-        status_class = "is-recorded"
-        symbol = "REC"
-    elif leave_request:
-        status_label = leave_label(leave_request.leave_type)
-        status_class = f'is-leave is-{leave_request.leave_type}'
-        symbol = leave_report_code(leave_request.leave_type)
+    if record and leave_request:
+        leave_request_id = leave_request.id
         entry_mode = leave_request.leave_type
-        notes_value = leave_request.reason or ""
+        status_label = f'Attendance + {leave_label(leave_request.leave_type, day_portion=leave_day_portion)}'
+        status_class = f'is-recorded is-leave is-{leave_request.leave_type}'
+        symbol = f'{_attendance_record_symbol(record)}/{leave_report_code(leave_request.leave_type, day_portion=leave_day_portion)}'
+        time_summary = (
+            f'{_attendance_record_summary(record)} | '
+            f'{leave_label(leave_request.leave_type, day_portion=leave_day_portion)}'
+        )
+    elif record:
+        symbol = _attendance_record_symbol(record)
+        time_summary = _attendance_record_summary(record)
+        if record.check_in_at and record.check_out_at:
+            status_label = "Complete"
+            status_class = "is-complete"
+        elif record.check_in_at:
+            status_label = "Checked in"
+            status_class = "is-present"
+        elif record.check_out_at:
+            status_label = "Checked out"
+            status_class = "is-recorded"
+        else:
+            status_label = "Recorded"
+            status_class = "is-recorded"
+    elif leave_request:
+        status_label = leave_label(leave_request.leave_type, day_portion=leave_day_portion)
+        status_class = f'is-leave is-{leave_request.leave_type}'
+        symbol = leave_report_code(leave_request.leave_type, day_portion=leave_day_portion)
+        entry_mode = leave_request.leave_type
         leave_request_id = leave_request.id
         if leave_request.start_date != leave_request.end_date:
             leave_locked = True
@@ -168,6 +198,8 @@ def _attendance_grid_cell(
                 f"to {leave_request.end_date.isoformat()}."
             )
             time_summary = "Edit from Leave Requests"
+        elif leave_is_partial_day(leave_day_portion):
+            time_summary = "Approved half-day leave"
         else:
             time_summary = "Approved leave"
     elif public_holiday:
@@ -178,6 +210,15 @@ def _attendance_grid_cell(
         notes_value = public_holiday.name
         public_holiday_id = public_holiday.id
         time_summary = f'{public_holiday.site.name if public_holiday.site else "Global"} holiday'
+
+    if leave_request and leave_request.start_date != leave_request.end_date:
+        leave_locked = True
+        leave_message = (
+            f"Part of a multi-day leave request: {leave_request.start_date.isoformat()} "
+            f"to {leave_request.end_date.isoformat()}."
+        )
+        if not record:
+            time_summary = "Edit from Leave Requests"
 
     return {
         "record": record,
@@ -201,6 +242,9 @@ def _attendance_grid_cell(
         ),
         "entry_mode": entry_mode,
         "notes_value": notes_value,
+        "leave_day_portion": leave_day_portion,
+        "leave_reason_value": leave_reason_value,
+        "attendance_notes_value": attendance_notes_value,
         "leave_locked": leave_locked,
         "leave_message": leave_message,
     }
@@ -359,6 +403,7 @@ async def attendance_grid_save(
     worker_id: int = Form(...),
     attendance_date: str = Form(...),
     entry_mode: str = Form("attendance"),
+    leave_day_portion: str = Form("full"),
     check_in_at: str = Form(""),
     check_out_at: str = Form(""),
     notes: str = Form(""),
@@ -395,7 +440,7 @@ async def attendance_grid_save(
             if entry_mode == "clear":
                 if existing_record:
                     await delete_attendance_record(session, existing_record)
-                elif existing_leave:
+                if existing_leave:
                     if existing_leave.start_date != target_date or existing_leave.end_date != target_date:
                         raise LeaveError("This date is part of a multi-day leave request. Edit it from the Leave Requests page.")
                     await delete_leave_request(session, existing_leave)
@@ -428,15 +473,31 @@ async def attendance_grid_save(
                 )
                 synced_record = await get_attendance_record(session, saved_record.id)
             elif entry_mode in {"annual", "mc", "emergency"}:
-                if existing_record:
-                    await delete_attendance_record(session, existing_record)
+                parsed_check_in = parse_datetime_local(check_in_at)
+                parsed_check_out = parse_datetime_local(check_out_at)
                 await admin_upsert_single_day_leave(
                     session,
                     worker_id=worker_id,
                     leave_type=entry_mode,
                     target_date=target_date,
+                    day_portion=leave_day_portion,
                     reason=notes,
                 )
+                if leave_is_partial_day(leave_day_portion):
+                    if parsed_check_in or parsed_check_out:
+                        saved_record = await create_or_update_attendance_record(
+                            session,
+                            worker_id=worker_id,
+                            attendance_date=target_date,
+                            check_in_at=parsed_check_in,
+                            check_out_at=parsed_check_out,
+                            notes=existing_record.notes if existing_record else None,
+                        )
+                        synced_record = await get_attendance_record(session, saved_record.id)
+                    elif existing_record:
+                        await delete_attendance_record(session, existing_record)
+                elif existing_record:
+                    await delete_attendance_record(session, existing_record)
             elif entry_mode == "public_holiday":
                 holiday_name = (notes or "").strip() or "Public Holiday"
                 holiday_already_exists = existing_public_holiday is not None

@@ -11,6 +11,7 @@ from services.leave_service import (
     LeaveError,
     approve_leave_request,
     get_leave_request,
+    leave_is_partial_day,
     list_leave_requests,
     reject_leave_request,
 )
@@ -19,6 +20,35 @@ from web.dependencies import current_admin_username, require_admin, require_csrf
 from web.security import SecurityError
 
 router = APIRouter(prefix="/leaves")
+
+
+def _build_leave_summary(leave_items: list[object]) -> dict[str, int]:
+    return {
+        "total": len(leave_items),
+        "pending": sum(1 for item in leave_items if item.status == "pending"),
+        "approved": sum(1 for item in leave_items if item.status == "approved"),
+        "rejected": sum(1 for item in leave_items if item.status == "rejected"),
+        "partial_day": sum(1 for item in leave_items if leave_is_partial_day(getattr(item, "day_portion", None))),
+        "with_media": sum(1 for item in leave_items if bool(item.telegram_file_id)),
+    }
+
+
+async def _leaves_page_context(*, site_id: Optional[int], error: Optional[str] = None) -> dict[str, object]:
+    async with session_scope() as session:
+        leave_items = list(await list_leave_requests(session, site_id=site_id))
+        sites = await list_sites(session)
+
+    selected_site_name = next((site.name for site in sites if site.id == site_id), None)
+    return {
+        "leaves": leave_items,
+        "sites": sites,
+        "selected_site_id": site_id,
+        "selected_site_name": selected_site_name,
+        "leave_summary": _build_leave_summary(leave_items),
+        "priority_leaves": [item for item in leave_items if item.status == "pending"][:4],
+        "recently_reviewed_leaves": [item for item in leave_items if item.status != "pending"][:4],
+        "error": error,
+    }
 
 
 def _leaves_redirect_url(
@@ -40,14 +70,7 @@ async def leaves(request: Request, site_id: Optional[int] = None) -> Response:
     if redirect:
         return redirect
 
-    async with session_scope() as session:
-        leave_items = await list_leave_requests(session, site_id=site_id)
-        sites = await list_sites(session)
-    return templates.TemplateResponse(
-        request,
-        "leaves.html",
-        {"leaves": leave_items, "sites": sites, "selected_site_id": site_id},
-    )
+    return templates.TemplateResponse(request, "leaves.html", await _leaves_page_context(site_id=site_id))
 
 
 async def _review_leave(leave_id: int, *, approve: bool, reviewer: Optional[str]) -> Optional[int]:
@@ -94,13 +117,10 @@ async def leaves_approve(
     try:
         require_csrf(request, csrf_token)
     except SecurityError as exc:
-        async with session_scope() as session:
-            leave_items = await list_leave_requests(session, site_id=site_id)
-            sites = await list_sites(session)
         return templates.TemplateResponse(
             request,
             "leaves.html",
-            {"leaves": leave_items, "sites": sites, "selected_site_id": site_id, "error": str(exc)},
+            await _leaves_page_context(site_id=site_id, error=str(exc)),
             status_code=400,
         )
     reviewed_leave_id = await _review_leave(leave_id, approve=True, reviewer=current_admin_username(request))
@@ -127,13 +147,10 @@ async def leaves_reject(
     try:
         require_csrf(request, csrf_token)
     except SecurityError as exc:
-        async with session_scope() as session:
-            leave_items = await list_leave_requests(session, site_id=site_id)
-            sites = await list_sites(session)
         return templates.TemplateResponse(
             request,
             "leaves.html",
-            {"leaves": leave_items, "sites": sites, "selected_site_id": site_id, "error": str(exc)},
+            await _leaves_page_context(site_id=site_id, error=str(exc)),
             status_code=400,
         )
     reviewed_leave_id = await _review_leave(leave_id, approve=False, reviewer=current_admin_username(request))

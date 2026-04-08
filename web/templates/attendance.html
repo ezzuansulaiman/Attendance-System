@@ -375,6 +375,17 @@
                                     {% endif %}
                                 </div>
                                 <div class="field">
+                                    <label for="grid-leave-portion-{{ row.worker.id }}-{{ cell.day }}">Leave Portion</label>
+                                    <select class="table-select" id="grid-leave-portion-{{ row.worker.id }}-{{ cell.day }}" name="leave_day_portion" {% if cell.leave_locked %}disabled{% endif %}>
+                                        <option value="full" {% if cell.leave_day_portion == 'full' %}selected{% endif %}>Full Day</option>
+                                        <option value="am" {% if cell.leave_day_portion == 'am' %}selected{% endif %}>Half Day AM</option>
+                                        <option value="pm" {% if cell.leave_day_portion == 'pm' %}selected{% endif %}>Half Day PM</option>
+                                    </select>
+                                    {% if cell.leave_locked %}
+                                    <input type="hidden" name="leave_day_portion" value="{{ cell.leave_day_portion }}">
+                                    {% endif %}
+                                </div>
+                                <div class="field">
                                     <label for="grid-checkin-{{ row.worker.id }}-{{ cell.day }}">Check-In</label>
                                     <input class="table-input" id="grid-checkin-{{ row.worker.id }}-{{ cell.day }}" type="datetime-local" name="check_in_at" value="{{ cell.record.check_in_at|datetime_local_value if cell.record and cell.record.check_in_at else '' }}" {% if cell.leave_locked %}disabled{% endif %}>
                                 </div>
@@ -383,8 +394,11 @@
                                     <input class="table-input" id="grid-checkout-{{ row.worker.id }}-{{ cell.day }}" type="datetime-local" name="check_out_at" value="{{ cell.record.check_out_at|datetime_local_value if cell.record and cell.record.check_out_at else '' }}" {% if cell.leave_locked %}disabled{% endif %}>
                                 </div>
                                 <div class="field">
-                                    <label for="grid-notes-{{ row.worker.id }}-{{ cell.day }}">Notes / Reason / Holiday Name</label>
+                                    <label for="grid-notes-{{ row.worker.id }}-{{ cell.day }}">Notes / Leave Reason / Holiday Name</label>
                                     <textarea class="table-textarea" id="grid-notes-{{ row.worker.id }}-{{ cell.day }}" name="notes" placeholder="Attendance note, leave reason, or public holiday name" {% if cell.leave_locked %}disabled{% endif %}>{{ cell.notes_value }}</textarea>
+                                    {% if cell.record and cell.leave_request and cell.attendance_notes_value %}
+                                    <div class="table-helper">Attendance note kept on record: {{ cell.attendance_notes_value }}</div>
+                                    {% endif %}
                                 </div>
                                 {% if cell.leave_locked %}
                                 <div class="matrix-lock">{{ cell.leave_message }}</div>

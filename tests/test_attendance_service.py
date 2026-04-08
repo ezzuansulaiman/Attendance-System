@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from models.database import Base
 from models.models import AttendanceRecord, Site, Worker
-from services.attendance_service import AttendanceError, update_attendance_record
+from services.attendance_service import AttendanceError, check_in, update_attendance_record
+from services.leave_service import approve_leave_request, create_leave_request
 
 
 LOCAL_TZ = ZoneInfo("Asia/Kuala_Lumpur")
@@ -32,6 +33,11 @@ def test_update_attendance_record_preserves_source_chat_id_for_telegram_originat
 def test_attendance_record_round_trip_keeps_malaysia_timezone_in_sqlite() -> None:
     with TemporaryDirectory(dir=Path.cwd()) as temp_dir:
         asyncio.run(_test_attendance_record_round_trip_keeps_malaysia_timezone_in_sqlite(Path(temp_dir)))
+
+
+def test_check_in_allows_approved_half_day_leave() -> None:
+    with TemporaryDirectory(dir=Path.cwd()) as temp_dir:
+        asyncio.run(_test_check_in_allows_approved_half_day_leave(Path(temp_dir)))
 
 
 async def _test_update_attendance_record_rejects_duplicate_target_without_deleting_original(tmp_path) -> None:
@@ -173,5 +179,53 @@ async def _test_attendance_record_round_trip_keeps_malaysia_timezone_in_sqlite(t
 
             assert record.check_in_at == expected
             assert record.check_in_at.tzinfo == LOCAL_TZ
+    finally:
+        await engine.dispose()
+
+
+async def _test_check_in_allows_approved_half_day_leave(tmp_path) -> None:
+    database_path = tmp_path / "attendance-half-day.db"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{database_path.as_posix()}")
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        async with session_factory() as session:
+            site = Site(name="Half Day Checkin Site", code="HDCK", is_active=True)
+            session.add(site)
+            await session.flush()
+
+            worker = Worker(
+                telegram_user_id=333444,
+                full_name="Half Day Checkin Worker",
+                site_id=site.id,
+                is_active=True,
+            )
+            session.add(worker)
+            await session.commit()
+            await session.refresh(worker)
+
+            leave_request = await create_leave_request(
+                session,
+                worker=worker,
+                leave_type="mc",
+                start_date=date(2026, 4, 7),
+                end_date=date(2026, 4, 7),
+                day_portion="pm",
+                reason="Afternoon clinic visit",
+                telegram_file_id="photo-file-id",
+            )
+            await approve_leave_request(session, leave_request=leave_request, admin_telegram_id=1)
+
+            record = await check_in(
+                session,
+                worker=worker,
+                chat_id=-10012345,
+                occurred_at=datetime(2026, 4, 7, 8, 0, tzinfo=LOCAL_TZ),
+            )
+
+            assert record.check_in_at == datetime(2026, 4, 7, 8, 0, tzinfo=LOCAL_TZ)
     finally:
         await engine.dispose()

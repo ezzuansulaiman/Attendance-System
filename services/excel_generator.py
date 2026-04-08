@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import calendar
 import io
+import re
 import zipfile
 from datetime import datetime, timezone
 from typing import Any
 from xml.sax.saxutils import escape
+
+PARTIAL_LEAVE_CODE_PATTERN = re.compile(r"^(?:AL|MC|EL)[AP]$", re.IGNORECASE)
+PARTIAL_LEAVE_TEXT_PATTERN = re.compile(r"\b(?:half[- ]day|separuh hari)\b", re.IGNORECASE)
 
 
 def _column_letter(index: int) -> str:
@@ -38,6 +42,53 @@ def _number_cell(row_index: int, column_index: int, value: int | float, style_id
 def _build_row(row_index: int, cells: list[str], height: int | None = None) -> str:
     height_attr = f' ht="{height}" customHeight="1"' if height else ""
     return f'<row r="{row_index}"{height_attr}>{"".join(cells)}</row>'
+
+
+def _normalize_client_submission_text(value: Any) -> str:
+    return "" if value is None else str(value).strip()
+
+
+def _mask_client_submission_day_value(value: Any) -> str:
+    normalized = _normalize_client_submission_text(value)
+    if not normalized:
+        return ""
+
+    tokens = [token.strip() for token in normalized.split("/") if token.strip()]
+    if any(PARTIAL_LEAVE_CODE_PATTERN.fullmatch(token) for token in tokens):
+        return "P"
+    return normalized
+
+
+def _detail_row_contains_partial_leave(*, status: Any, notes: Any) -> bool:
+    text = f"{_normalize_client_submission_text(status)} {_normalize_client_submission_text(notes)}"
+    return bool(PARTIAL_LEAVE_TEXT_PATTERN.search(text))
+
+
+def _mask_client_submission_detail_status(value: Any) -> str:
+    normalized = _normalize_client_submission_text(value)
+    if PARTIAL_LEAVE_TEXT_PATTERN.search(normalized):
+        return "Present"
+    return normalized
+
+
+def _mask_client_submission_detail_notes(*, value: Any, status: Any) -> str:
+    normalized = _normalize_client_submission_text(value)
+    if not normalized:
+        return "-"
+    if not _detail_row_contains_partial_leave(status=status, notes=value):
+        return normalized
+
+    kept_segments: list[str] = []
+    for segment in [part.strip() for part in normalized.split("|") if part.strip()]:
+        if segment.startswith("Leave:"):
+            continue
+        if segment.startswith("Attendance:"):
+            attendance_segment = segment.split(":", 1)[-1].strip()
+            if attendance_segment:
+                kept_segments.append(attendance_segment)
+            continue
+        kept_segments.append(segment)
+    return " | ".join(kept_segments) if kept_segments else "-"
 
 
 def _worksheet_xml(
@@ -231,7 +282,7 @@ def _build_summary_sheet(report: dict[str, Any]) -> str:
             cells.extend(
                 [
                     _text_cell(row_index, 4, "Legend", 3),
-                    _text_cell(row_index, 5, "P = Present", 4),
+                    _text_cell(row_index, 5, "P = Present | PH = Public Holiday", 4),
                 ]
             )
         rows.append(_build_row(row_index, cells))
@@ -329,7 +380,14 @@ def _build_matrix_sheet(report: dict[str, Any]) -> str:
                 cell_style = 9
             elif calendar.weekday(report["year"], report["month"], day) >= 5:
                 cell_style = 8
-            body_cells.append(_text_cell(current_row, day_start_column + day - 1, item["days"][day - 1], cell_style))
+            body_cells.append(
+                _text_cell(
+                    current_row,
+                    day_start_column + day - 1,
+                    _mask_client_submission_day_value(item["days"][day - 1]),
+                    cell_style,
+                )
+            )
         body_cells.extend(
             [
                 _number_cell(current_row, present_column, item["present_days"], 10),
@@ -393,6 +451,8 @@ def _build_detail_sheet(report: dict[str, Any]) -> str:
 
     current_row = first_data_row
     for index, item in enumerate(report["detail_rows"], start=1):
+        masked_status = _mask_client_submission_detail_status(item["status"])
+        masked_notes = _mask_client_submission_detail_notes(value=item["notes"], status=item["status"])
         rows.append(
             _build_row(
                 current_row,
@@ -404,8 +464,8 @@ def _build_detail_sheet(report: dict[str, Any]) -> str:
                     _text_cell(current_row, 5, item["employee_code"], 7),
                     _text_cell(current_row, 6, item["check_in"], 7),
                     _text_cell(current_row, 7, item["check_out"], 7),
-                    _text_cell(current_row, 8, item["status"], 7),
-                    _text_cell(current_row, 9, item["notes"], 6),
+                    _text_cell(current_row, 8, masked_status, 7),
+                    _text_cell(current_row, 9, masked_notes, 6),
                 ],
             )
         )

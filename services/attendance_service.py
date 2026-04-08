@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from datetime_utils import coerce_optional_local_datetime
 from models.models import AttendanceRecord, LeaveRequest, Site, Worker
+from services.leave_service import leave_blocks_attendance
 from services.site_service import get_default_site
 
 
@@ -219,7 +220,7 @@ async def check_in(
         raise AttendanceError("Check-in time is required.")
     attendance_date = occurred_at.date()
     leave = await _approved_leave_for_day(session, worker.id, attendance_date)
-    if leave:
+    if leave and leave_blocks_attendance(leave):
         raise AttendanceError("Anda sudah mempunyai cuti yang diluluskan untuk hari ini.")
 
     record = await get_attendance_for_date(

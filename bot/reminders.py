@@ -15,7 +15,7 @@ from config import Settings, get_settings
 from models import session_scope
 from models.models import AttendanceRecord, Site, Worker
 from services.attendance_service import list_active_workers, list_attendance_for_date
-from services.leave_service import approved_leaves_in_range
+from services.leave_service import approved_leaves_in_range, leave_blocks_attendance
 from services.public_holiday_service import list_public_holidays_in_range
 from services.site_service import list_sites
 
@@ -174,7 +174,9 @@ async def pending_worker_names_for_chat(
         attendance_records = await list_attendance_for_date(session, attendance_date=target_date)
         attendance_lookup = {record.worker_id: record for record in attendance_records}
         approved_leave_worker_ids = {
-            leave.worker_id for leave in await approved_leaves_in_range(session, start_date=target_date, end_date=target_date)
+            leave.worker_id
+            for leave in await approved_leaves_in_range(session, start_date=target_date, end_date=target_date)
+            if leave_blocks_attendance(leave)
         }
         public_holiday_worker_ids = public_holiday_worker_ids_for_date(
             workers=workers_for_chat,

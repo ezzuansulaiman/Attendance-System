@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from datetime_utils import format_local_datetime
-from services.leave_service import annual_leave_notice_text, leave_label
+from services.leave_service import annual_leave_notice_text, leave_duration_days, leave_label
 
 
 def format_display_date(value: date) -> str:
@@ -14,6 +14,13 @@ def format_display_date(value: date) -> str:
 
 def format_display_datetime(value: datetime) -> str:
     return format_local_datetime(value, "%d/%m/%Y %H:%M")
+
+
+def format_leave_duration(*, start_date: date, end_date: date, day_portion: Optional[str]) -> str:
+    duration_days = leave_duration_days(start_date=start_date, end_date=end_date, day_portion=day_portion)
+    if float(duration_days).is_integer():
+        return f"{int(duration_days)} hari"
+    return f"{duration_days:.1f} hari"
 
 
 def mask_sensitive_value(value: Optional[str], *, visible_suffix: int = 4) -> str:
@@ -89,13 +96,15 @@ def build_leave_summary_text(
     leave_type: str,
     start_date: date,
     end_date: date,
+    day_portion: Optional[str],
     reason: str,
 ) -> str:
     return (
         f"<b>Permohonan Cuti #{leave_id}</b>\n"
         f"Pekerja: {worker_name}\n"
-        f"Jenis: {leave_label(leave_type)}\n"
+        f"Jenis: {leave_label(leave_type, day_portion=day_portion)}\n"
         f"Tarikh: {format_display_date(start_date)} hingga {format_display_date(end_date)}\n"
+        f"Tempoh: {format_leave_duration(start_date=start_date, end_date=end_date, day_portion=day_portion)}\n"
         f"Sebab: {reason}"
     )
 
@@ -105,6 +114,7 @@ def build_leave_review_text(
     leave_type: str,
     start_date: date,
     end_date: date,
+    day_portion: Optional[str],
     status: str,
     review_notes: Optional[str] = None,
 ) -> str:
@@ -116,8 +126,9 @@ def build_leave_review_text(
     notes_line = f"\nCatatan: {review_notes}" if review_notes else ""
     return (
         f"Permohonan cuti anda #{leave_id} kini <b>{status_map.get(status, status.upper())}</b>.\n"
-        f"Jenis: {leave_label(leave_type)}\n"
-        f"Tarikh: {format_display_date(start_date)} hingga {format_display_date(end_date)}"
+        f"Jenis: {leave_label(leave_type, day_portion=day_portion)}\n"
+        f"Tarikh: {format_display_date(start_date)} hingga {format_display_date(end_date)}\n"
+        f"Tempoh: {format_leave_duration(start_date=start_date, end_date=end_date, day_portion=day_portion)}"
         f"{notes_line}"
     )
 
@@ -137,6 +148,7 @@ def build_leave_confirmation_text(
     leave_type: str,
     start_date: date,
     end_date: date,
+    day_portion: Optional[str],
     reason: str,
     has_supporting_photo: bool,
 ) -> str:
@@ -144,8 +156,9 @@ def build_leave_confirmation_text(
     return (
         "<b>Sahkan Permohonan Cuti</b>\n"
         f"Pekerja: {worker_name}\n"
-        f"Jenis: {leave_label(leave_type)}\n"
+        f"Jenis: {leave_label(leave_type, day_portion=day_portion)}\n"
         f"Tarikh: {format_display_date(start_date)} hingga {format_display_date(end_date)}\n"
+        f"Tempoh: {format_leave_duration(start_date=start_date, end_date=end_date, day_portion=day_portion)}\n"
         f"Sebab: {reason}\n"
         f"Dokumen Sokongan: {document_line}\n\n"
         "Tekan <b>Sahkan</b> untuk menghantar permohonan."
@@ -159,11 +172,17 @@ def build_today_status_text(
     check_in_at: Optional[datetime],
     check_out_at: Optional[datetime],
     approved_leave_label: Optional[str],
+    approved_leave_is_partial: bool = False,
     public_holiday_label: Optional[str] = None,
 ) -> str:
     site_line = site_name or "Belum ditetapkan"
     if approved_leave_label:
-        status_line = f"Cuti Diluluskan ({approved_leave_label})"
+        if approved_leave_is_partial and (check_in_at or check_out_at):
+            status_line = f"Kehadiran + Cuti Separuh Hari ({approved_leave_label})"
+        elif approved_leave_is_partial:
+            status_line = f"Cuti Separuh Hari ({approved_leave_label})"
+        else:
+            status_line = f"Cuti Diluluskan ({approved_leave_label})"
     elif public_holiday_label and not check_in_at and not check_out_at:
         status_line = f"Cuti Umum ({public_holiday_label})"
     elif check_in_at and check_out_at:

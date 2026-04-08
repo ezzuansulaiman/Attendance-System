@@ -49,7 +49,7 @@ from services.attendance_service import (
     get_worker_by_telegram_id,
     self_register_worker,
 )
-from services.leave_service import leave_label, leave_status_label, list_leave_requests_for_worker
+from services.leave_service import leave_is_partial_day, leave_label, leave_status_label, list_leave_requests_for_worker
 from services.public_holiday_service import get_public_holiday_for_date, public_holiday_label
 
 REGISTRATION_BACK_CALLBACK = "registration:back"
@@ -225,7 +225,12 @@ async def show_worker_status(callback: CallbackQuery) -> None:
             site_name=worker.site.name if worker.site else None,
             check_in_at=attendance.check_in_at if attendance else None,
             check_out_at=attendance.check_out_at if attendance else None,
-            approved_leave_label=leave_label(approved_leave.leave_type) if approved_leave else None,
+            approved_leave_label=(
+                leave_label(approved_leave.leave_type, day_portion=approved_leave.day_portion)
+                if approved_leave
+                else None
+            ),
+            approved_leave_is_partial=leave_is_partial_day(approved_leave.day_portion) if approved_leave else False,
             public_holiday_label=public_holiday_label(public_holiday),
         ),
         reply_markup=worker_menu_keyboard(),
@@ -272,7 +277,7 @@ async def show_worker_leave_history(callback: CallbackQuery) -> None:
     entries = [
         {
             "id": str(item.id),
-            "type": leave_label(item.leave_type),
+            "type": leave_label(item.leave_type, day_portion=item.day_portion),
             "date_range": f"{format_display_date(item.start_date)} - {format_display_date(item.end_date)}",
             "status": leave_status_label(item.status),
         }

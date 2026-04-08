@@ -40,6 +40,7 @@ def test_dashboard_template_renders_primary_actions() -> None:
         id=1,
         worker=worker,
         leave_type="annual",
+        day_portion="full",
         start_date=date(2026, 4, 8),
         end_date=date(2026, 4, 9),
         status="pending",
@@ -90,6 +91,9 @@ def test_attendance_template_renders_submission_actions() -> None:
                             "is_weekend": False,
                             "entry_mode": "attendance",
                             "notes_value": "",
+                            "leave_day_portion": "full",
+                            "leave_reason_value": "",
+                            "attendance_notes_value": "",
                             "leave_locked": False,
                             "leave_message": "",
                         }
@@ -115,6 +119,8 @@ def test_attendance_template_renders_submission_actions() -> None:
     assert "grid-checkin-1-1" in html
     assert "Annual Leave" in html
     assert "MC" in html
+    assert "Leave Portion" in html
+    assert "Half Day AM" in html
     assert "Public Holiday" in html
     assert "EMP001" in html
     assert "/reports/monthly" in html
@@ -139,18 +145,21 @@ def test_attendance_template_renders_leave_grid_cells() -> None:
                     "cells": [
                         {
                             "record": None,
-                            "leave_request": SimpleNamespace(id=9, leave_type="mc"),
+                            "leave_request": SimpleNamespace(id=9, leave_type="mc", day_portion="pm"),
                             "day": 2,
                             "date_iso": "2026-04-02",
                             "status_class": "is-leave is-mc",
-                            "symbol": "MC",
+                            "symbol": "MCP",
                             "has_note": True,
-                            "status_label": "Cuti Sakit",
-                            "time_summary": "Approved leave",
+                            "status_label": "Cuti Sakit (Separuh Hari (Petang))",
+                            "time_summary": "Approved half-day leave",
                             "day_label": "2 Tue",
                             "is_weekend": False,
                             "entry_mode": "mc",
                             "notes_value": "Medical leave",
+                            "leave_day_portion": "pm",
+                            "leave_reason_value": "Medical leave",
+                            "attendance_notes_value": "",
                             "leave_locked": False,
                             "leave_message": "",
                         }
@@ -170,7 +179,7 @@ def test_attendance_template_renders_leave_grid_cells() -> None:
     )
 
     assert "Cuti Sakit" in html
-    assert "Approved leave" in html
+    assert "Approved half-day leave" in html
     assert "attendance/grid/save" in html
 
 
@@ -190,6 +199,7 @@ def test_workers_sites_and_leaves_templates_render_navigation_actions() -> None:
         id=1,
         worker=worker,
         leave_type="annual",
+        day_portion="full",
         start_date=date(2026, 4, 8),
         end_date=date(2026, 4, 9),
         reason="Family matter",
@@ -219,6 +229,17 @@ def test_workers_sites_and_leaves_templates_render_navigation_actions() -> None:
         leaves=[leave],
         sites=[site],
         selected_site_id=1,
+        selected_site_name="Sepang",
+        leave_summary={
+            "total": 1,
+            "pending": 1,
+            "approved": 0,
+            "rejected": 0,
+            "partial_day": 0,
+            "with_media": 0,
+        },
+        priority_leaves=[leave],
+        recently_reviewed_leaves=[],
     )
 
     assert "Create Worker" in workers_html
@@ -226,4 +247,5 @@ def test_workers_sites_and_leaves_templates_render_navigation_actions() -> None:
     assert "Create Site" in sites_html
     assert "/sites/1/edit" in sites_html
     assert "Apply Filter" in leaves_html
+    assert "Priority Queue" in leaves_html
     assert "/leaves/1/reject" in leaves_html

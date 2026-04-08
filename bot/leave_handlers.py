@@ -15,6 +15,7 @@ from bot.keyboards import (
     flow_control_keyboard,
     is_back_alias,
     is_cancel_alias,
+    leave_day_portion_keyboard,
     worker_menu_keyboard,
     leave_type_keyboard,
 )
@@ -27,6 +28,7 @@ from services.leave_service import (
     LeaveError,
     annual_leave_notice_text,
     create_leave_request,
+    is_supported_leave_day_portion,
     is_supported_leave_type,
     leave_label,
 )
@@ -52,6 +54,7 @@ async def _submit_leave_request(message: Message, state: FSMContext) -> None:
                 leave_type=data["leave_type"],
                 start_date=data["start_date"],
                 end_date=data["end_date"],
+                day_portion=data.get("day_portion"),
                 reason=data["reason"],
                 telegram_file_id=data.get("telegram_file_id"),
             )
@@ -67,6 +70,7 @@ async def _submit_leave_request(message: Message, state: FSMContext) -> None:
             leave_request.leave_type,
             leave_request.start_date,
             leave_request.end_date,
+            leave_request.day_portion,
             leave_request.reason,
         )
         + "\nStatus: DALAM SEMAKAN"
@@ -78,6 +82,16 @@ async def _submit_leave_request(message: Message, state: FSMContext) -> None:
 async def _show_leave_type_prompt(target: Message, *, editing: bool = False) -> None:
     intro = "Sila pilih jenis cuti." if not editing else "Baik, sila pilih semula jenis cuti."
     await target.answer(intro, reply_markup=leave_type_keyboard())
+
+
+async def _show_leave_day_portion_prompt(target: Message) -> None:
+    await target.answer(
+        "Sila pilih sama ada cuti ini sehari penuh atau separuh hari.",
+        reply_markup=leave_day_portion_keyboard(
+            back_callback=LEAVE_BACK_CALLBACK,
+            cancel_callback=LEAVE_CANCEL_CALLBACK,
+        ),
+    )
 
 
 async def _show_leave_confirmation(message: Message, state: FSMContext) -> None:
@@ -96,6 +110,7 @@ async def _show_leave_confirmation(message: Message, state: FSMContext) -> None:
             leave_type=data["leave_type"],
             start_date=data["start_date"],
             end_date=data["end_date"],
+            day_portion=data.get("day_portion"),
             reason=data["reason"],
             has_supporting_photo=bool(data.get("telegram_file_id")),
         ),
@@ -127,7 +142,18 @@ async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
             reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
         )
         return
+    if current_state == LeaveApplicationStates.day_portion.state:
+        await state.set_state(LeaveApplicationStates.end_date)
+        await message.answer(
+            "Sila hantar semula tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.",
+            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+        )
+        return
     if current_state == LeaveApplicationStates.reason.state:
+        if data.get("start_date") == data.get("end_date"):
+            await state.set_state(LeaveApplicationStates.day_portion)
+            await _show_leave_day_portion_prompt(message)
+            return
         await state.set_state(LeaveApplicationStates.end_date)
         await message.answer(
             "Sila hantar semula tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.",
@@ -239,8 +265,30 @@ async def capture_end_date(message: Message, state: FSMContext) -> None:
         return
 
     await state.update_data(end_date=end_date)
+    if end_date == data["start_date"]:
+        await state.set_state(LeaveApplicationStates.day_portion)
+        await _show_leave_day_portion_prompt(message)
+        return
+
+    await state.update_data(day_portion="full")
     await state.set_state(LeaveApplicationStates.reason)
     await message.answer(
+        "Sila hantar sebab ringkas bagi permohonan cuti ini.",
+        reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+    )
+
+
+@router.callback_query(F.data.startswith("leave:portion:"))
+async def pick_leave_day_portion(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    day_portion = callback.data.split(":")[-1]
+    if not is_supported_leave_day_portion(day_portion):
+        await callback.message.answer("Pilihan bahagian hari ini tidak disokong.")
+        return
+
+    await state.update_data(day_portion=day_portion)
+    await state.set_state(LeaveApplicationStates.reason)
+    await callback.message.answer(
         "Sila hantar sebab ringkas bagi permohonan cuti ini.",
         reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
     )
@@ -315,6 +363,7 @@ async def handle_leave_cancel_callback(callback: CallbackQuery, state: FSMContex
 @router.message(LeaveApplicationStates.leave_type, F.text.func(is_cancel_alias))
 @router.message(LeaveApplicationStates.start_date, F.text.func(is_cancel_alias))
 @router.message(LeaveApplicationStates.end_date, F.text.func(is_cancel_alias))
+@router.message(LeaveApplicationStates.day_portion, F.text.func(is_cancel_alias))
 @router.message(LeaveApplicationStates.reason, F.text.func(is_cancel_alias))
 @router.message(LeaveApplicationStates.photo, F.text.func(is_cancel_alias))
 @router.message(LeaveApplicationStates.confirmation, F.text.func(is_cancel_alias))
@@ -325,8 +374,20 @@ async def cancel_leave_from_text(message: Message, state: FSMContext) -> None:
 @router.message(LeaveApplicationStates.leave_type, F.text.func(is_back_alias))
 @router.message(LeaveApplicationStates.start_date, F.text.func(is_back_alias))
 @router.message(LeaveApplicationStates.end_date, F.text.func(is_back_alias))
+@router.message(LeaveApplicationStates.day_portion, F.text.func(is_back_alias))
 @router.message(LeaveApplicationStates.reason, F.text.func(is_back_alias))
 @router.message(LeaveApplicationStates.photo, F.text.func(is_back_alias))
 @router.message(LeaveApplicationStates.confirmation, F.text.func(is_back_alias))
 async def go_back_in_leave_from_text(message: Message, state: FSMContext) -> None:
     await _step_back_in_leave_flow(message, state)
+
+
+@router.message(LeaveApplicationStates.day_portion)
+async def prompt_leave_day_portion_again(message: Message, state: FSMContext) -> None:
+    if is_cancel_alias(message.text):
+        await _cancel_leave_flow(message, state)
+        return
+    if is_back_alias(message.text):
+        await _step_back_in_leave_flow(message, state)
+        return
+    await _show_leave_day_portion_prompt(message)

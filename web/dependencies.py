@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 
 from config import get_settings
 from datetime_utils import format_local_datetime, format_local_datetime_input, now_local
-from services.leave_service import leave_label
+from services.leave_service import leave_duration_days, leave_label, leave_status_label
 from web.security import ADMIN_SESSION_KEY, csrf_token as get_csrf_token, session_admin_username, verify_csrf_token
 
 settings = get_settings()
@@ -20,12 +20,24 @@ templates.env.globals["current_month"] = lambda: now_local().month
 templates.env.globals["current_company_name"] = lambda: settings.company_name
 templates.env.globals["csrf_token"] = get_csrf_token
 templates.env.globals["leave_label"] = leave_label
+templates.env.globals["leave_status_label"] = leave_status_label
 templates.env.filters["format_local_datetime"] = format_local_datetime
 templates.env.filters["datetime_local_value"] = format_local_datetime_input
 
 
 class FormValidationError(ValueError):
     pass
+
+
+def format_leave_duration_display(*, start_date: date, end_date: date, day_portion: Optional[str]) -> str:
+    duration_days = leave_duration_days(start_date=start_date, end_date=end_date, day_portion=day_portion)
+    if float(duration_days).is_integer():
+        day_count = int(duration_days)
+        return f"{day_count} day" if day_count == 1 else f"{day_count} days"
+    return f"{duration_days:.1f} day"
+
+
+templates.env.globals["format_leave_duration_display"] = format_leave_duration_display
 
 
 def is_logged_in(request: Request) -> bool:

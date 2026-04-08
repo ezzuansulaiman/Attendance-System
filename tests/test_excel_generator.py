@@ -28,7 +28,7 @@ def test_build_monthly_attendance_excel_returns_valid_workbook() -> None:
                     "worker_name": "Worker One",
                     "employee_code": "EMP001",
                     "site_name": "Sepang",
-                    "days": ["P", "P"] + [""] * 29,
+                    "days": ["P/ALP", "MCP"] + [""] * 29,
                     "present_days": 2,
                     "completed_days": 2,
                 }
@@ -40,10 +40,10 @@ def test_build_monthly_attendance_excel_returns_valid_workbook() -> None:
                     "worker_name": "Worker One",
                     "employee_code": "EMP001",
                     "site_name": "Sepang",
-                    "status": "Present",
+                    "status": "Approved half day leave (Annual Leave (Separuh Hari (Petang)))",
                     "check_in": "2026-02-01 08:00",
-                    "check_out": "2026-02-01 17:00",
-                    "notes": "-",
+                    "check_out": "2026-02-01 12:00",
+                    "notes": "Leave: Half day annual leave | Attendance: Worked morning shift",
                 }
             ],
         }
@@ -64,5 +64,15 @@ def test_build_monthly_attendance_excel_returns_valid_workbook() -> None:
     assert "MONTHLY ATTENDANCE REPORT" in summary_sheet
     assert "Submission Notes" not in summary_sheet
     assert "Prepared for client submission and internal verification." not in summary_sheet
+    assert "P = Present | PH = Public Holiday" in summary_sheet
+    assert "Half Day" not in summary_sheet
     assert "Monthly Attendance Register" in matrix_sheet
+    assert "P/ALP" not in matrix_sheet
+    assert "MCP" not in matrix_sheet
     assert "Detailed Attendance Log" not in detail_sheet
+    assert "Approved half day leave" not in detail_sheet
+    assert "half-day" not in detail_sheet
+    assert "Separuh Hari" not in detail_sheet
+    assert "Leave:" not in detail_sheet
+    assert "Worked morning shift" in detail_sheet
+    assert "Present" in detail_sheet

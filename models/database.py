@@ -172,6 +172,7 @@ async def init_database() -> None:
             leave_names = await _sqlite_column_names(connection, "leave_requests")
             sqlite_missing_columns = {
                 "worker_id": "INTEGER",
+                "day_portion": "VARCHAR(10) DEFAULT 'full'",
                 "start_date": "DATE",
                 "end_date": "DATE",
                 "telegram_file_id": "VARCHAR(255)",
@@ -203,6 +204,16 @@ async def init_database() -> None:
                         UPDATE leave_requests
                         SET start_date = CAST(CAST(date_from AS TEXT) AS DATE)
                         WHERE start_date IS NULL
+                        """
+                    )
+                )
+            if "day_portion" in leave_names:
+                await connection.execute(
+                    text(
+                        """
+                        UPDATE leave_requests
+                        SET day_portion = 'full'
+                        WHERE day_portion IS NULL OR TRIM(CAST(day_portion AS TEXT)) = ''
                         """
                     )
                 )
@@ -286,6 +297,7 @@ async def init_database() -> None:
             )
             postgres_missing_columns = [
                 ("worker_id", "INTEGER"),
+                ("day_portion", "VARCHAR(10) DEFAULT 'full'"),
                 ("start_date", "DATE"),
                 ("end_date", "DATE"),
                 ("telegram_file_id", "VARCHAR(255)"),
@@ -344,6 +356,16 @@ async def init_database() -> None:
                         UPDATE leave_requests
                         SET start_date = CAST(CAST(date_from AS TEXT) AS DATE)
                         WHERE start_date IS NULL
+                        """
+                    )
+                )
+            if "day_portion" in pg_names:
+                await connection.execute(
+                    text(
+                        """
+                        UPDATE leave_requests
+                        SET day_portion = 'full'
+                        WHERE day_portion IS NULL OR BTRIM(CAST(day_portion AS TEXT)) = ''
                         """
                     )
                 )

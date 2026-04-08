@@ -1,32 +1,333 @@
 {% extends "base.html" %}
 {% block title %}Leaves | Attendance Command Center{% endblock %}
 {% block content %}
+<style>
+    .leave-summary-grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    }
+
+    .leave-stat-card {
+        position: relative;
+        overflow: hidden;
+        padding: 20px;
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        background:
+            radial-gradient(circle at top right, rgba(255, 255, 255, 0.46), transparent 28%),
+            linear-gradient(180deg, rgba(255, 253, 249, 0.94), rgba(244, 238, 227, 0.92));
+        box-shadow: var(--shadow-md);
+    }
+
+    .leave-stat-card::after {
+        content: "";
+        position: absolute;
+        inset: auto -30px -30px auto;
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: rgba(36, 70, 50, 0.05);
+    }
+
+    .leave-stat-value {
+        margin-top: 14px;
+        font-size: clamp(1.9rem, 3vw, 2.5rem);
+        font-weight: 800;
+        letter-spacing: -0.06em;
+    }
+
+    .leave-stat-label {
+        margin-top: 8px;
+        color: var(--ink-soft);
+        font-size: 0.92rem;
+        font-weight: 700;
+    }
+
+    .leave-stat-note {
+        margin-top: 8px;
+        color: var(--ink-muted);
+        font-size: 0.84rem;
+        line-height: 1.55;
+    }
+
+    .leave-chip-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+
+    .leave-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.74);
+        color: var(--ink-soft);
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+
+    .leave-focus-grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+    }
+
+    .leave-priority-grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    }
+
+    .leave-request-card {
+        padding: 18px;
+        border-radius: 24px;
+        border: 1px solid var(--border);
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 240, 228, 0.9));
+        box-shadow: var(--shadow-sm);
+    }
+
+    .leave-request-card.pending {
+        background:
+            radial-gradient(circle at top right, rgba(255, 213, 143, 0.22), transparent 26%),
+            linear-gradient(180deg, rgba(255, 252, 246, 0.96), rgba(255, 244, 227, 0.92));
+    }
+
+    .leave-request-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .leave-request-id {
+        color: var(--ink-muted);
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+
+    .leave-request-title {
+        margin-top: 6px;
+        font-size: 1rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+    }
+
+    .leave-request-subtitle {
+        margin-top: 6px;
+        color: var(--ink-muted);
+        font-size: 0.86rem;
+        line-height: 1.5;
+    }
+
+    .leave-request-body {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+    }
+
+    .leave-info-grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .leave-info-card {
+        padding: 12px 13px;
+        border-radius: 16px;
+        border: 1px solid rgba(44, 66, 51, 0.09);
+        background: rgba(255, 255, 255, 0.68);
+    }
+
+    .leave-info-label {
+        color: var(--ink-muted);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+
+    .leave-info-value {
+        margin-top: 6px;
+        color: var(--ink);
+        font-size: 0.9rem;
+        font-weight: 700;
+        line-height: 1.45;
+    }
+
+    .leave-reason-card {
+        padding: 14px 15px;
+        border-radius: 18px;
+        border: 1px solid rgba(44, 66, 51, 0.08);
+        background: rgba(255, 255, 255, 0.72);
+    }
+
+    .leave-reason-card strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 0.84rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+    }
+
+    .leave-reason-card p {
+        margin: 0;
+        color: var(--ink);
+        line-height: 1.65;
+    }
+
+    .leave-action-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+    }
+
+    .leave-action-row form {
+        margin: 0;
+        flex: 1 1 140px;
+    }
+
+    .leave-action-row button {
+        width: 100%;
+    }
+
+    .leave-ledger-table td {
+        padding-top: 16px;
+        padding-bottom: 16px;
+    }
+
+    .leave-ledger-cell {
+        display: grid;
+        gap: 8px;
+        min-width: 140px;
+    }
+
+    .leave-evidence-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 11px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+    }
+
+    .leave-evidence-badge.has-media {
+        background: var(--success-soft);
+        color: var(--success);
+    }
+
+    .leave-evidence-badge.no-media {
+        background: var(--surface-muted);
+        color: var(--ink-muted);
+    }
+
+    .leave-review-note {
+        padding: 11px 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(44, 66, 51, 0.08);
+        color: var(--ink-muted);
+        font-size: 0.83rem;
+        line-height: 1.55;
+    }
+
+    .leave-mini-list {
+        display: grid;
+        gap: 12px;
+        margin-top: 8px;
+    }
+
+    .leave-mini-item {
+        padding: 14px 15px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.66);
+    }
+
+    .leave-mini-item .cell-title {
+        font-size: 0.95rem;
+    }
+
+    @media (max-width: 1100px) {
+        .leave-focus-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 720px) {
+        .leave-info-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
 <section class="page-header fade-in">
     <div>
         <p class="eyebrow">Leave Review Desk</p>
-        <h2>Leave Requests</h2>
-        <p>Review incoming applications, narrow the queue by site, and process decisions from one cleaner approval workspace.</p>
+        <h2>Leave Records</h2>
+        <p>Semak permohonan dengan lebih cepat, nampak status semasa dengan jelas, dan urus keputusan cuti dari satu workspace yang rasa seperti sistem HR sebenar.</p>
         <div class="hero-metrics" style="margin-top: 18px;">
-            <span class="hero-chip">Visible Requests: {{ leaves|length }}</span>
-            <span class="hero-chip">{{ 'Filtered Site' if selected_site_id else 'All Sites' }}</span>
+            <span class="hero-chip">Visible Requests: {{ leave_summary.total }}</span>
+            <span class="hero-chip">Pending: {{ leave_summary.pending }}</span>
+            <span class="hero-chip">Half Day Entries: {{ leave_summary.partial_day }}</span>
+            <span class="hero-chip">{{ selected_site_name if selected_site_name else 'All Sites' }}</span>
         </div>
     </div>
     <div class="page-header-aside">
         <div class="spotlight" style="background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.12); color: #fff;">
-            <h3 style="color: #fff;">Review faster, communicate sooner</h3>
-            <p style="color: rgba(255, 255, 255, 0.78);">Quick decisions reduce back-and-forth for workers and keep planning clearer at the site level.</p>
+            <h3 style="color: #fff;">Built for daily HR review</h3>
+            <p style="color: rgba(255, 255, 255, 0.78);">Priority items sit at the top, supporting proof is easier to spot, and the full ledger below stays ready for audit or site follow-up.</p>
         </div>
     </div>
 </section>
 
-<section class="section-grid fade-in delay-1">
+<section class="leave-summary-grid fade-in delay-1">
+    <article class="leave-stat-card">
+        <div class="leave-request-id">Approval Queue</div>
+        <div class="leave-stat-value">{{ leave_summary.pending }}</div>
+        <div class="leave-stat-label">Need decision now</div>
+        <div class="leave-stat-note">Best used as the first pass for supervisors or admin review each day.</div>
+    </article>
+    <article class="leave-stat-card">
+        <div class="leave-request-id">Approved</div>
+        <div class="leave-stat-value">{{ leave_summary.approved }}</div>
+        <div class="leave-stat-label">Already cleared</div>
+        <div class="leave-stat-note">Useful when cross-checking site manpower planning and completed approvals.</div>
+    </article>
+    <article class="leave-stat-card">
+        <div class="leave-request-id">Rejected</div>
+        <div class="leave-stat-value">{{ leave_summary.rejected }}</div>
+        <div class="leave-stat-label">Need follow-up</div>
+        <div class="leave-stat-note">These remain visible as part of the review history and decision trail.</div>
+    </article>
+    <article class="leave-stat-card">
+        <div class="leave-request-id">Supporting Proof</div>
+        <div class="leave-stat-value">{{ leave_summary.with_media }}</div>
+        <div class="leave-stat-label">Requests with media</div>
+        <div class="leave-stat-note">Medical and emergency leave evidence is easier to audit when surfaced here.</div>
+    </article>
+</section>
+
+<section class="leave-focus-grid fade-in delay-1">
     <div class="stack">
         <section class="panel">
             <div class="panel-header">
                 <div>
-                    <h2>Review Queue</h2>
-                    <p>Use site filtering to focus on one location or keep the full company view for a broader approval pass.</p>
+                    <h2>Review Scope</h2>
+                    <p>Filter the review desk by site when one operation team needs attention, or keep the full company queue visible for a broader pass.</p>
                 </div>
+                <span class="mini-badge neutral">{{ selected_site_name if selected_site_name else 'All sites' }}</span>
             </div>
             {% if error %}
             <div class="error">{{ error }}</div>
@@ -43,6 +344,11 @@
                 </div>
                 <button type="submit">Apply Filter</button>
             </form>
+            <div class="leave-chip-row">
+                <span class="leave-chip">Visible: {{ leave_summary.total }}</span>
+                <span class="leave-chip">Pending: {{ leave_summary.pending }}</span>
+                <span class="leave-chip">Partial day: {{ leave_summary.partial_day }}</span>
+            </div>
         </section>
     </div>
 
@@ -50,15 +356,29 @@
         <section class="panel">
             <div class="panel-header">
                 <div>
-                    <h2>Queue Tips</h2>
-                    <p>Make approvals easier to trust.</p>
+                    <h2>Recently Reviewed</h2>
+                    <p>Quick context on the latest decisions in the current scope.</p>
                 </div>
             </div>
-            <ul class="bullet-list" style="margin-top: 0;">
-                <li>Filter by site when one supervisor or project is the priority for the day.</li>
-                <li>Review the date span and reason together before deciding, especially for longer leave blocks.</li>
-                <li>Processed requests stay visible, so the table also works as a simple audit trail.</li>
-            </ul>
+            <div class="leave-mini-list">
+                {% for leave in recently_reviewed_leaves %}
+                <div class="leave-mini-item">
+                    <div class="cell-title">#{{ leave.id }} - {{ leave.worker.full_name }}</div>
+                    <div class="cell-meta">{{ leave_label(leave.leave_type, leave.day_portion or 'full') }}</div>
+                    <div class="leave-chip-row" style="margin-top: 10px;">
+                        <span class="status-pill {% if leave.status == 'approved' %}success{% elif leave.status == 'pending' %}warning{% elif leave.status == 'rejected' %}danger{% else %}neutral{% endif %}">
+                            {{ leave_status_label(leave.status) }}
+                        </span>
+                        <span class="leave-chip">{{ format_leave_duration_display(start_date=leave.start_date, end_date=leave.end_date, day_portion=leave.day_portion or 'full') }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="empty-state" style="padding: 18px 10px;">
+                    <strong>No reviewed requests yet</strong>
+                    Reviewed leave items will appear here automatically.
+                </div>
+                {% endfor %}
+            </div>
         </section>
     </aside>
 </section>
@@ -66,20 +386,90 @@
 <section class="panel fade-in delay-2">
     <div class="panel-header">
         <div>
-            <h2>Approval Table</h2>
-            <p>Every request in the current scope, including supporting context and direct actions for pending items.</p>
+            <h2>Priority Queue</h2>
+            <p>Pending items are surfaced as richer cards so key context can be scanned before you approve or reject.</p>
         </div>
+        <span class="mini-badge warning">{{ priority_leaves|length }} visible</span>
+    </div>
+    <div class="leave-priority-grid">
+        {% for leave in priority_leaves %}
+        <article class="leave-request-card pending">
+            <div class="leave-request-top">
+                <div>
+                    <div class="leave-request-id">Request #{{ leave.id }}</div>
+                    <div class="leave-request-title">{{ leave.worker.full_name }}</div>
+                    <div class="leave-request-subtitle">{{ leave.worker.site.name if leave.worker.site else 'Unassigned site' }}</div>
+                </div>
+                <span class="status-pill warning">{{ leave_status_label(leave.status) }}</span>
+            </div>
+
+            <div class="leave-chip-row">
+                <span class="leave-chip">{{ leave_label(leave.leave_type, leave.day_portion or 'full') }}</span>
+                <span class="leave-chip">{{ format_leave_duration_display(start_date=leave.start_date, end_date=leave.end_date, day_portion=leave.day_portion or 'full') }}</span>
+                <span class="leave-chip">{{ leave.start_date }} to {{ leave.end_date }}</span>
+            </div>
+
+            <div class="leave-request-body">
+                <div class="leave-info-grid">
+                    <div class="leave-info-card">
+                        <div class="leave-info-label">Schedule</div>
+                        <div class="leave-info-value">{{ leave.start_date }} to {{ leave.end_date }}</div>
+                    </div>
+                    <div class="leave-info-card">
+                        <div class="leave-info-label">Support</div>
+                        <div class="leave-info-value">{{ 'Telegram media available' if leave.telegram_file_id else 'No media attached' }}</div>
+                    </div>
+                </div>
+
+                <div class="leave-reason-card">
+                    <strong>Reason</strong>
+                    <p>{{ leave.reason }}</p>
+                </div>
+            </div>
+
+            <div class="leave-action-row">
+                <form method="post" action="{{ request.url_for('leaves_approve', leave_id=leave.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                    {% if selected_site_id %}
+                    <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                    {% endif %}
+                    <button type="submit">Approve</button>
+                </form>
+                <form method="post" action="{{ request.url_for('leaves_reject', leave_id=leave.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                    {% if selected_site_id %}
+                    <input type="hidden" name="site_id" value="{{ selected_site_id }}">
+                    {% endif %}
+                    <button class="danger" type="submit">Reject</button>
+                </form>
+            </div>
+        </article>
+        {% else %}
+        <div class="empty-state" style="grid-column: 1 / -1;">
+            <strong>No pending leave requests</strong>
+            The approval queue is clear for the current scope.
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="panel fade-in delay-3">
+    <div class="panel-header">
+        <div>
+            <h2>Leave Ledger</h2>
+            <p>The full review history for the selected scope, with duration, evidence, review notes, and direct actions for pending items.</p>
+        </div>
+        <span class="mini-badge success">{{ leave_summary.total }} records</span>
     </div>
     <div class="table-wrap">
-        <table>
+        <table class="leave-ledger-table">
             <thead>
                 <tr>
                     <th>Request</th>
+                    <th>Schedule</th>
                     <th>Worker</th>
-                    <th>Dates</th>
-                    <th>Reason</th>
-                    <th>Media</th>
-                    <th>Status</th>
+                    <th>Reason & Evidence</th>
+                    <th>Review</th>
                     <th>Action</th>
                 </tr>
             </thead>
@@ -87,17 +477,51 @@
                 {% for leave in leaves %}
                 <tr>
                     <td data-label="Request">
-                        <div class="cell-title">#{{ leave.id }} - {{ leave_label(leave.leave_type) }}</div>
-                        <div class="cell-meta">{{ leave.worker.site.name if leave.worker.site else 'Unassigned site' }}</div>
+                        <div class="leave-ledger-cell">
+                            <div class="cell-title">#{{ leave.id }} - {{ leave_label(leave.leave_type, leave.day_portion or 'full') }}</div>
+                            <div class="cell-meta">
+                                {{ leave.worker.site.name if leave.worker.site else 'Unassigned site' }}
+                                {% if leave.submitted_at is defined and leave.submitted_at %}
+                                | Submitted {{ leave.submitted_at|format_local_datetime('%d/%m/%Y %H:%M') }}
+                                {% endif %}
+                            </div>
+                        </div>
                     </td>
-                    <td data-label="Worker">{{ leave.worker.full_name }}</td>
-                    <td data-label="Dates">{{ leave.start_date }} to {{ leave.end_date }}</td>
-                    <td data-label="Reason">{{ leave.reason }}</td>
-                    <td data-label="Media">{{ 'Telegram file_id saved' if leave.telegram_file_id else '-' }}</td>
-                    <td data-label="Status">
-                        <span class="status-pill {% if leave.status == 'approved' %}success{% elif leave.status == 'pending' %}warning{% elif leave.status == 'rejected' %}danger{% else %}neutral{% endif %}">
-                            {{ leave.status }}
-                        </span>
+                    <td data-label="Schedule">
+                        <div class="leave-ledger-cell">
+                            <div class="cell-title">{{ leave.start_date }} to {{ leave.end_date }}</div>
+                            <div class="cell-meta">{{ format_leave_duration_display(start_date=leave.start_date, end_date=leave.end_date, day_portion=leave.day_portion or 'full') }}</div>
+                        </div>
+                    </td>
+                    <td data-label="Worker">
+                        <div class="leave-ledger-cell">
+                            <div class="cell-title">{{ leave.worker.full_name }}</div>
+                            <div class="cell-meta">{{ leave.worker.site.name if leave.worker.site else 'Unassigned site' }}</div>
+                        </div>
+                    </td>
+                    <td data-label="Reason & Evidence">
+                        <div class="leave-ledger-cell">
+                            <span class="leave-evidence-badge {% if leave.telegram_file_id %}has-media{% else %}no-media{% endif %}">
+                                {{ 'Telegram file_id saved' if leave.telegram_file_id else 'No media attached' }}
+                            </span>
+                            <div class="leave-reason-card">
+                                <strong>Reason</strong>
+                                <p>{{ leave.reason }}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td data-label="Review">
+                        <div class="leave-ledger-cell">
+                            <span class="status-pill {% if leave.status == 'approved' %}success{% elif leave.status == 'pending' %}warning{% elif leave.status == 'rejected' %}danger{% else %}neutral{% endif %}">
+                                {{ leave_status_label(leave.status) }}
+                            </span>
+                            {% if leave.review_notes %}
+                            <div class="leave-review-note">{{ leave.review_notes }}</div>
+                            {% endif %}
+                            {% if leave.reviewed_at is defined and leave.reviewed_at %}
+                            <div class="cell-meta">Reviewed {{ leave.reviewed_at|format_local_datetime('%d/%m/%Y %H:%M') }}</div>
+                            {% endif %}
+                        </div>
                     </td>
                     <td data-label="Action">
                         <div class="table-actions">
@@ -124,7 +548,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" class="empty-state">
+                    <td colspan="6" class="empty-state">
                         <strong>No leave requests right now</strong>
                         When workers submit leave, the review queue will appear here automatically.
                     </td>

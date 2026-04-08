@@ -17,6 +17,11 @@ LEAVE_LABELS = {
     "mc": "Cuti Sakit",
     "emergency": "Cuti Kecemasan",
 }
+LEAVE_DAY_PORTION_LABELS = {
+    "full": "Sehari Penuh",
+    "am": "Separuh Hari (Pagi)",
+    "pm": "Separuh Hari (Petang)",
+}
 LEAVE_REPORT_CODES = {
     "annual": "AL",
     "mc": "MC",
@@ -34,16 +39,60 @@ def is_supported_leave_type(leave_type: str) -> bool:
     return leave_type in LEAVE_LABELS
 
 
+def normalize_leave_day_portion(day_portion: Optional[str]) -> str:
+    normalized = (day_portion or "").strip().lower()
+    if normalized in LEAVE_DAY_PORTION_LABELS:
+        return normalized
+    return "full"
+
+
+def is_supported_leave_day_portion(day_portion: Optional[str]) -> bool:
+    normalized = (day_portion or "").strip().lower()
+    return normalized in LEAVE_DAY_PORTION_LABELS
+
+
+def leave_day_portion_label(day_portion: Optional[str]) -> str:
+    normalized = normalize_leave_day_portion(day_portion)
+    return LEAVE_DAY_PORTION_LABELS[normalized]
+
+
+def leave_is_partial_day(day_portion: Optional[str]) -> bool:
+    return normalize_leave_day_portion(day_portion) in {"am", "pm"}
+
+
+def leave_blocks_attendance(leave_request: LeaveRequest) -> bool:
+    return not leave_is_partial_day(getattr(leave_request, "day_portion", None))
+
+
 def leave_requires_photo(leave_type: str) -> bool:
     return leave_type in REQUIRES_PHOTO
 
 
-def leave_label(leave_type: str) -> str:
-    return LEAVE_LABELS.get(leave_type, leave_type.title())
+def leave_label(leave_type: str, day_portion: Optional[str] = None) -> str:
+    base_label = LEAVE_LABELS.get(leave_type, leave_type.title())
+    normalized_day_portion = normalize_leave_day_portion(day_portion)
+    if normalized_day_portion == "full":
+        return base_label
+    return f"{base_label} ({leave_day_portion_label(normalized_day_portion)})"
 
 
-def leave_report_code(leave_type: str) -> str:
-    return LEAVE_REPORT_CODES.get(leave_type, leave_type.upper())
+def leave_report_code(leave_type: str, day_portion: Optional[str] = None) -> str:
+    base_code = LEAVE_REPORT_CODES.get(leave_type, leave_type.upper())
+    normalized_day_portion = normalize_leave_day_portion(day_portion)
+    if normalized_day_portion == "am":
+        return f"{base_code}A"
+    if normalized_day_portion == "pm":
+        return f"{base_code}P"
+    return base_code
+
+
+def leave_duration_days(*, start_date: date, end_date: date, day_portion: Optional[str] = None) -> float:
+    if end_date < start_date:
+        return 0
+    normalized_day_portion = normalize_leave_day_portion(day_portion)
+    if start_date == end_date and normalized_day_portion in {"am", "pm"}:
+        return 0.5
+    return float((end_date - start_date).days + 1)
 
 
 def leave_status_label(status: str) -> str:
@@ -69,6 +118,17 @@ def annual_leave_notice_text() -> str:
 def _clean_notes(value: Optional[str]) -> Optional[str]:
     cleaned = (value or "").strip()
     return cleaned or None
+
+
+def _validated_day_portion(*, day_portion: Optional[str], start_date: date, end_date: date) -> str:
+    raw_day_portion = (day_portion or "").strip().lower()
+    if raw_day_portion and raw_day_portion not in LEAVE_DAY_PORTION_LABELS:
+        raise LeaveError("Bahagian hari ini tidak disokong.")
+
+    normalized_day_portion = normalize_leave_day_portion(day_portion)
+    if start_date != end_date and normalized_day_portion != "full":
+        raise LeaveError("Cuti separuh hari hanya disokong untuk satu tarikh sahaja.")
+    return normalized_day_portion
 
 
 async def _review_leave_request(
@@ -98,6 +158,7 @@ async def create_leave_request(
     leave_type: str,
     start_date: date,
     end_date: date,
+    day_portion: Optional[str] = None,
     reason: str,
     telegram_file_id: Optional[str] = None,
 ) -> LeaveRequest:
@@ -105,6 +166,11 @@ async def create_leave_request(
         raise LeaveError("Jenis cuti ini tidak disokong.")
     if end_date < start_date:
         raise LeaveError("Tarikh akhir tidak boleh lebih awal daripada tarikh mula.")
+    validated_day_portion = _validated_day_portion(
+        day_portion=day_portion,
+        start_date=start_date,
+        end_date=end_date,
+    )
     if leave_type == "annual":
         today = datetime.now(settings.local_timezone).date()
         notice_days = annual_leave_notice_days()
@@ -130,6 +196,7 @@ async def create_leave_request(
     request = LeaveRequest(
         worker_id=worker.id,
         leave_type=leave_type,
+        day_portion=validated_day_portion,
         start_date=start_date,
         end_date=end_date,
         reason=reason.strip(),
@@ -197,10 +264,16 @@ async def admin_upsert_single_day_leave(
     worker_id: int,
     leave_type: str,
     target_date: date,
+    day_portion: Optional[str] = None,
     reason: Optional[str] = None,
 ) -> LeaveRequest:
     if not is_supported_leave_type(leave_type):
         raise LeaveError("Selected leave type is not supported.")
+    validated_day_portion = _validated_day_portion(
+        day_portion=day_portion,
+        start_date=target_date,
+        end_date=target_date,
+    )
 
     worker = await session.get(Worker, worker_id)
     if not worker:
@@ -218,10 +291,14 @@ async def admin_upsert_single_day_leave(
     if existing_request and (existing_request.start_date != target_date or existing_request.end_date != target_date):
         raise LeaveError("This date is part of a multi-day leave request. Edit it from the Leave Requests page.")
 
-    effective_reason = (reason or "").strip() or f"{leave_label(leave_type)} recorded from attendance grid."
+    effective_reason = (
+        (reason or "").strip()
+        or f"{leave_label(leave_type, day_portion=validated_day_portion)} recorded from attendance grid."
+    )
 
     if existing_request:
         existing_request.leave_type = leave_type
+        existing_request.day_portion = validated_day_portion
         existing_request.reason = effective_reason
         existing_request.status = "approved"
         existing_request.reviewed_at = datetime.now(timezone.utc)
@@ -234,6 +311,7 @@ async def admin_upsert_single_day_leave(
     leave_request = LeaveRequest(
         worker_id=worker_id,
         leave_type=leave_type,
+        day_portion=validated_day_portion,
         start_date=target_date,
         end_date=target_date,
         reason=effective_reason,
@@ -293,7 +371,7 @@ async def approved_leaves_in_range(
 ) -> Sequence[LeaveRequest]:
     result = await session.execute(
         select(LeaveRequest)
-        .options(selectinload(LeaveRequest.worker))
+        .options(selectinload(LeaveRequest.worker).selectinload(Worker.site))
         .where(
             LeaveRequest.status == "approved",
             LeaveRequest.start_date <= end_date,

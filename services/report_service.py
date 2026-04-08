@@ -12,6 +12,7 @@ from config import get_settings
 from datetime_utils import format_local_datetime, now_local
 from models.models import AttendanceRecord, Site, Worker
 from services.excel_generator import build_monthly_attendance_excel as render_monthly_attendance_excel
+from services.leave_service import approved_leaves_in_range, leave_is_partial_day, leave_label, leave_report_code, normalize_leave_day_portion
 from services.pdf_generator import build_monthly_attendance_pdf as render_monthly_attendance_pdf
 from services.public_holiday_service import list_public_holidays_in_range
 from services.site_service import get_default_site
@@ -50,9 +51,51 @@ def _build_public_holiday_lookup(public_holidays: list[object]) -> dict[date, ob
     return lookup
 
 
-def _attendance_symbol(record: Optional[AttendanceRecord], *, public_holiday: Optional[object]) -> str:
-    if record and record.check_in_at:
+def _build_leave_lookup(
+    approved_leaves: list[object],
+    *,
+    year: int,
+    month: int,
+    days_in_month: int,
+) -> dict[tuple[int, date], object]:
+    lookup: dict[tuple[int, date], object] = {}
+    for leave_request in approved_leaves:
+        current_date = max(leave_request.start_date, date(year, month, 1))
+        final_date = min(leave_request.end_date, date(year, month, days_in_month))
+        while current_date <= final_date:
+            lookup[(leave_request.worker_id, current_date)] = leave_request
+            current_date = date.fromordinal(current_date.toordinal() + 1)
+    return lookup
+
+
+def _report_attendance_symbol(record: Optional[AttendanceRecord]) -> str:
+    if not record:
+        return ""
+    if record.check_in_at:
         return "P"
+    if record.check_out_at:
+        return "OUT"
+    return "REC"
+
+
+def _attendance_symbol(
+    record: Optional[AttendanceRecord],
+    leave_request: Optional[object],
+    *,
+    public_holiday: Optional[object],
+) -> str:
+    if leave_request:
+        leave_code = leave_report_code(
+            leave_request.leave_type,
+            day_portion=normalize_leave_day_portion(getattr(leave_request, "day_portion", None)),
+        )
+        attendance_code = _report_attendance_symbol(record)
+        if attendance_code:
+            return f"{attendance_code}/{leave_code}"
+        return leave_code
+    attendance_code = _report_attendance_symbol(record)
+    if attendance_code:
+        return attendance_code
     if public_holiday:
         return "PH"
     return ""
@@ -77,6 +120,7 @@ def _build_worker_report_row(
     month: int,
     days_in_month: int,
     attendance_lookup: dict[tuple[int, date], AttendanceRecord],
+    leave_lookup: dict[tuple[int, date], object],
     public_holiday_lookup: dict[date, object],
 ) -> dict[str, Any]:
     day_values: list[str] = []
@@ -90,10 +134,11 @@ def _build_worker_report_row(
 
         current_date = date(year, month, day)
         record = attendance_lookup.get((worker.id, current_date))
+        leave_request = leave_lookup.get((worker.id, current_date))
         public_holiday = public_holiday_lookup.get(current_date)
-        symbol = _attendance_symbol(record, public_holiday=public_holiday)
+        symbol = _attendance_symbol(record, leave_request, public_holiday=public_holiday)
         if symbol:
-            if symbol == "P":
+            if record and record.check_in_at:
                 present_days += 1
             if record and record.check_out_at:
                 completed_days += 1
@@ -109,28 +154,59 @@ def _build_worker_report_row(
     }
 
 
-def _build_detail_rows(attendance_records: list[AttendanceRecord]) -> list[dict[str, str]]:
-    ordered_records = sorted(
-        attendance_records,
-        key=lambda record: (
-            record.attendance_date,
-            _site_name(record.worker),
-            record.worker.full_name,
+def _detail_status(record: Optional[AttendanceRecord], leave_request: Optional[object]) -> str:
+    if record and leave_request:
+        return f"{_attendance_status(record)} + {leave_label(leave_request.leave_type, leave_request.day_portion)}"
+    if leave_request:
+        if leave_is_partial_day(leave_request.day_portion):
+            return f"Approved half-day leave ({leave_label(leave_request.leave_type, leave_request.day_portion)})"
+        return f"Approved leave ({leave_label(leave_request.leave_type, leave_request.day_portion)})"
+    if record:
+        return _attendance_status(record)
+    return "-"
+
+
+def _detail_notes(record: Optional[AttendanceRecord], leave_request: Optional[object]) -> str:
+    notes: list[str] = []
+    if leave_request and leave_request.reason:
+        notes.append(f"Leave: {leave_request.reason}")
+    if record and record.notes:
+        notes.append(f"Attendance: {record.notes}")
+    if notes:
+        return " | ".join(notes)
+    return "-"
+
+
+def _build_detail_rows(
+    *,
+    attendance_lookup: dict[tuple[int, date], AttendanceRecord],
+    leave_lookup: dict[tuple[int, date], object],
+) -> list[dict[str, str]]:
+    ordered_keys = sorted(
+        set(attendance_lookup) | set(leave_lookup),
+        key=lambda item: (
+            item[1],
+            _site_name(attendance_lookup.get(item, leave_lookup.get(item)).worker),
+            attendance_lookup.get(item, leave_lookup.get(item)).worker.full_name,
         ),
     )
     detail_rows: list[dict[str, str]] = []
-    for record in ordered_records:
+    for key in ordered_keys:
+        record = attendance_lookup.get(key)
+        leave_request = leave_lookup.get(key)
+        worker = record.worker if record else leave_request.worker
+        target_date = key[1]
         detail_rows.append(
             {
-                "attendance_date": record.attendance_date.isoformat(),
-                "weekday": calendar.day_abbr[record.attendance_date.weekday()],
-                "worker_name": record.worker.full_name,
-                "employee_code": record.worker.employee_code or "-",
-                "site_name": _site_name(record.worker),
-                "status": _attendance_status(record),
-                "check_in": _format_timestamp(record.check_in_at),
-                "check_out": _format_timestamp(record.check_out_at),
-                "notes": record.notes or "-",
+                "attendance_date": target_date.isoformat(),
+                "weekday": calendar.day_abbr[target_date.weekday()],
+                "worker_name": worker.full_name,
+                "employee_code": worker.employee_code or "-",
+                "site_name": _site_name(worker),
+                "status": _detail_status(record, leave_request),
+                "check_in": _format_timestamp(record.check_in_at if record else None),
+                "check_out": _format_timestamp(record.check_out_at if record else None),
+                "notes": _detail_notes(record, leave_request),
             }
         )
     return detail_rows
@@ -202,9 +278,17 @@ async def build_monthly_attendance_report(
         attendance_query = attendance_query.where(Worker.site_id == resolved_site_id)
     attendance_result = await session.execute(attendance_query)
     attendance_records = attendance_result.scalars().all()
+    approved_leaves = await approved_leaves_in_range(session, start_date=start_date, end_date=end_date)
     public_holidays = await list_public_holidays_in_range(session, start_date=start_date, end_date=end_date)
 
     attendance_lookup = _build_attendance_lookup(attendance_records)
+    worker_ids = {worker.id for worker in workers}
+    leave_lookup = _build_leave_lookup(
+        [leave for leave in approved_leaves if leave.worker_id in worker_ids],
+        year=year,
+        month=month,
+        days_in_month=days_in_month,
+    )
     public_holiday_lookup = _build_public_holiday_lookup(
         [holiday for holiday in public_holidays if holiday.site_id in {resolved_site_id, None}]
     )
@@ -215,11 +299,12 @@ async def build_monthly_attendance_report(
             month=month,
             days_in_month=days_in_month,
             attendance_lookup=attendance_lookup,
+            leave_lookup=leave_lookup,
             public_holiday_lookup=public_holiday_lookup,
         )
         for worker in workers
     ]
-    detail_rows = _build_detail_rows(attendance_records)
+    detail_rows = _build_detail_rows(attendance_lookup=attendance_lookup, leave_lookup=leave_lookup)
     total_present_days = sum(int(row["present_days"]) for row in report_rows)
     total_completed_days = sum(int(row["completed_days"]) for row in report_rows)
     total_workers = len(report_rows)

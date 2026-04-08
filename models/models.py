@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.database import Base
@@ -81,6 +81,7 @@ class LeaveRequest(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     worker_id: Mapped[int] = mapped_column(ForeignKey("workers.id", ondelete="CASCADE"), index=True)
     leave_type: Mapped[str] = mapped_column(String(20), index=True)
+    day_portion: Mapped[str] = mapped_column(String(10), default="full", server_default=text("'full'"))
     start_date: Mapped[date] = mapped_column(Date)
     end_date: Mapped[date] = mapped_column(Date)
     reason: Mapped[str] = mapped_column(Text)

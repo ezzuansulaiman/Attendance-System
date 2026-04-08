@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 PDF_BREAK_OPPORTUNITY = "\u200b"
 CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 WHITESPACE_PATTERN = re.compile(r"\s+")
+PARTIAL_LEAVE_CODE_PATTERN = re.compile(r"^(?:AL|MC|EL)[AP]$")
 PDF_COPY = {
     "eyebrow": "MONTHLY ATTENDANCE",
     "title": "Attendance Report",
@@ -68,13 +69,24 @@ def _sanitize_pdf_field(value: Any, *, max_length: int, chunk_size: int) -> str:
     return _insert_break_opportunities(truncated, chunk_size=chunk_size)
 
 
+def _mask_client_submission_day_value(value: Any) -> str:
+    normalized = _normalize_pdf_text(value)
+    if not normalized:
+        return ""
+
+    tokens = [token.strip() for token in normalized.split("/") if token.strip()]
+    if any(PARTIAL_LEAVE_CODE_PATTERN.fullmatch(token) for token in tokens):
+        return "P"
+    return normalized
+
+
 def _prepare_report_for_pdf(report: dict[str, Any]) -> dict[str, Any]:
     sanitized_rows: list[dict[str, Any]] = []
     for row in report.get("rows", []):
         sanitized_row = dict(row)
         sanitized_row["worker_name"] = _sanitize_pdf_field(row.get("worker_name"), max_length=240, chunk_size=16)
         sanitized_row["employee_code"] = _sanitize_pdf_field(row.get("employee_code"), max_length=80, chunk_size=8)
-        sanitized_row["days"] = [_normalize_pdf_text(value) for value in row.get("days", [])]
+        sanitized_row["days"] = [_mask_client_submission_day_value(value) for value in row.get("days", [])]
         sanitized_rows.append(sanitized_row)
 
     sanitized_report = dict(report)

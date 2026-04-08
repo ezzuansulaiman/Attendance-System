@@ -211,7 +211,7 @@
                     {% for leave in leave_requests %}
                     <tr>
                         <td data-label="Request">
-                            <div class="cell-title">#{{ leave.id }} - {{ leave_label(leave.leave_type) }}</div>
+                            <div class="cell-title">#{{ leave.id }} - {{ leave_label(leave.leave_type, leave.day_portion or 'full') }}</div>
                             <div class="cell-meta">{{ leave.worker.site.name if leave.worker.site else 'Unassigned site' }}</div>
                         </td>
                         <td data-label="Worker">{{ leave.worker.full_name }}</td>

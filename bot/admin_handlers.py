@@ -77,6 +77,7 @@ async def show_pending_leaves(callback: CallbackQuery) -> None:
             leave_request.leave_type,
             leave_request.start_date,
             leave_request.end_date,
+            leave_request.day_portion,
             leave_request.reason,
         )
         if leave_request.telegram_file_id:

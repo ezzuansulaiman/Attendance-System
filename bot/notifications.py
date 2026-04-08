@@ -31,6 +31,7 @@ async def send_leave_request_to_admins(bot: Bot, leave_request_id: int) -> None:
             leave_request.leave_type,
             leave_request.start_date,
             leave_request.end_date,
+            leave_request.day_portion,
             leave_request.reason,
         )
 
@@ -67,6 +68,7 @@ async def send_leave_review_to_worker(bot: Bot, leave_request_id: int) -> None:
                     leave_request.leave_type,
                     leave_request.start_date,
                     leave_request.end_date,
+                    leave_request.day_portion,
                     leave_request.status,
                     leave_request.review_notes,
                 ),

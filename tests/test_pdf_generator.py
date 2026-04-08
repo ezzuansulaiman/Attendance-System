@@ -1,6 +1,6 @@
 import pytest
 
-from services.pdf_generator import PDF_COPY, build_monthly_attendance_pdf
+from services.pdf_generator import PDF_COPY, _mask_client_submission_day_value, build_monthly_attendance_pdf
 
 
 def _sample_report() -> dict:
@@ -71,6 +71,22 @@ def test_build_monthly_attendance_pdf_accepts_existing_report_shape_with_summary
 
     assert pdf_bytes.startswith(b"%PDF")
     assert len(pdf_bytes) > 1000
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        ("P/ALP", "P"),
+        ("ALA", "P"),
+        ("MCP", "P"),
+        ("ELA", "P"),
+        ("P", "P"),
+        ("PH", "PH"),
+        ("AL", "AL"),
+    ],
+)
+def test_mask_client_submission_day_value_hides_half_day_codes(raw_value: str, expected: str) -> None:
+    assert _mask_client_submission_day_value(raw_value) == expected
 
 
 @pytest.mark.parametrize(

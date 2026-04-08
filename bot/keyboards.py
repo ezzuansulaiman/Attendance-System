@@ -80,6 +80,24 @@ def leave_type_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def leave_day_portion_keyboard(
+    *,
+    back_callback: str = BACK_CALLBACK,
+    cancel_callback: str = CANCEL_CALLBACK,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Sehari Penuh", callback_data="leave:portion:full")],
+            [InlineKeyboardButton(text="Separuh Hari (Pagi)", callback_data="leave:portion:am")],
+            [InlineKeyboardButton(text="Separuh Hari (Petang)", callback_data="leave:portion:pm")],
+            [
+                InlineKeyboardButton(text="Kembali", callback_data=back_callback),
+                InlineKeyboardButton(text="Batal", callback_data=cancel_callback),
+            ],
+        ]
+    )
+
+
 def admin_menu_keyboard(*, web_login_url: Optional[str] = None) -> InlineKeyboardMarkup:
     inline_keyboard = [
         [InlineKeyboardButton(text="Cuti Menunggu", callback_data="admin:pending")],

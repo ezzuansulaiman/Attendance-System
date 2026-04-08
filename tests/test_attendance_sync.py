@@ -78,6 +78,21 @@ def test_build_today_status_text_surfaces_public_holiday() -> None:
     assert "Cuti Umum: Labour Day" in text
 
 
+def test_build_today_status_text_surfaces_half_day_leave_with_attendance() -> None:
+    text = build_today_status_text(
+        worker_name="Worker One",
+        site_name="Sepang",
+        check_in_at=datetime(2026, 4, 7, 8, 0, tzinfo=LOCAL_TZ),
+        check_out_at=None,
+        approved_leave_label="Cuti Tahunan (Separuh Hari (Petang))",
+        approved_leave_is_partial=True,
+        public_holiday_label=None,
+    )
+
+    assert "Kehadiran + Cuti Separuh Hari" in text
+    assert "Rekod Masuk: 07/04/2026 08:00" in text
+
+
 def test_notify_worker_about_attendance_change_only_for_telegram_originated_records(monkeypatch) -> None:
     sent_payloads: list[dict[str, object]] = []
 
