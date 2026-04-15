@@ -236,12 +236,17 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot)
 
 @router.callback_query(F.data.startswith("leave:type:"))
 async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
-    if await state.get_state() != LeaveApplicationStates.leave_type.state:
+    current_state = await state.get_state()
+    # Block if mid-flow at a DIFFERENT step — would disrupt active data
+    if current_state is not None and current_state != LeaveApplicationStates.leave_type.state:
         await callback.answer(
             "Permohonan ini sudah tidak aktif. Sila mulakan semula dari menu.",
             show_alert=True,
         )
         return
+    # No active flow (stale button) — restart cleanly from leave_type step
+    if current_state is None:
+        await state.set_state(LeaveApplicationStates.leave_type)
     await callback.answer()
     leave_type = callback.data.split(":")[-1]
     if not is_supported_leave_type(leave_type):
@@ -418,7 +423,7 @@ async def confirm_leave_request(callback: CallbackQuery, state: FSMContext, bot:
 async def handle_leave_back_callback(callback: CallbackQuery, state: FSMContext) -> None:
     current = await state.get_state()
     if current is None or not current.startswith("LeaveApplicationStates:"):
-        await callback.answer("Tiada permohonan aktif.", show_alert=True)
+        await callback.answer("Tiada permohonan aktif. Tekan Mohon Cuti untuk mulakan.")
         return
     await callback.answer()
     await _step_back_in_leave_flow(callback.message, state)
@@ -428,7 +433,7 @@ async def handle_leave_back_callback(callback: CallbackQuery, state: FSMContext)
 async def handle_leave_cancel_callback(callback: CallbackQuery, state: FSMContext) -> None:
     current = await state.get_state()
     if current is None or not current.startswith("LeaveApplicationStates:"):
-        await callback.answer("Tiada permohonan aktif untuk dibatalkan.", show_alert=True)
+        await callback.answer("Tiada permohonan aktif untuk dibatalkan.")
         return
     await callback.answer()
     await _cancel_leave_flow(callback.message, state)
