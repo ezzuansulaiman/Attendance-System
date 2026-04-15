@@ -10,7 +10,11 @@
       "Read(//c/Users/ezzua/AppData/Local/Python/bin//**)",
       "Read(//c/Users/ezzua/AppData/Local/Programs/**)",
       "Read(//c/Users/ezzua/**)",
-      "Bash(/c/Users/ezzua/AppData/Local/Python/bin/python.exe -m pip install -r requirements.txt)"
+      "Bash(/c/Users/ezzua/AppData/Local/Python/bin/python.exe -m pip install -r requirements.txt)",
+      "Bash(\"C:\\\\Users\\\\ezzua\\\\AppData\\\\Local\\\\Python\\\\pythoncore-3.14-64\\\\python.exe\" -m pytest tests/ -v)",
+      "Bash(gh pr create --title 'Fix leave confirmation — pass correct user ID when submitting' --body ':*)",
+      "Bash(where gh:*)",
+      "Bash(winget list:*)"
     ]
   }
 }

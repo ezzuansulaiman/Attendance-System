@@ -95,6 +95,16 @@ class LeaveRequest(Base):
     worker: Mapped[Worker] = relationship(back_populates="leave_requests")
 
 
+class BotFsmState(Base):
+    __tablename__ = "bot_fsm_states"
+
+    bot_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    state: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    data_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class PublicHoliday(Base):
     __tablename__ = "public_holidays"
 

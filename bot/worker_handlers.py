@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -25,6 +25,7 @@ from bot.keyboards import (
     is_back_alias,
     is_cancel_alias,
     is_worker_menu_alias,
+    leave_type_keyboard,
     main_menu_keyboard,
     worker_menu_keyboard,
 )
@@ -39,7 +40,7 @@ from bot.messages import (
     worker_menu_text,
 )
 from datetime_utils import format_local_datetime
-from bot.states import RegistrationStates
+from bot.states import LeaveApplicationStates, RegistrationStates
 from models import session_scope
 from services.attendance_service import (
     AttendanceError,
@@ -113,6 +114,26 @@ async def _step_back_in_registration_flow(message: Message, state: FSMContext) -
     await message.answer("Anda sudah berada di langkah pertama pendaftaran.")
 
 
+@router.message(CommandStart(deep_link=True))
+async def handle_deep_link_start(message: Message, command: CommandObject, state: FSMContext) -> None:
+    if command.args != "leave":
+        await show_menu(message, state)
+        return
+
+    worker_access = await load_worker_access(message.from_user.id)
+    if worker_access.is_inactive:
+        await message.answer(inactive_worker_text())
+        return
+    worker = worker_access.worker
+    if not worker:
+        await message.answer(registered_workers_only_text())
+        return
+
+    await state.clear()
+    await state.set_state(LeaveApplicationStates.leave_type)
+    await message.answer("Sila pilih jenis cuti.", reply_markup=leave_type_keyboard(cancel_callback="leave:cancel"))
+
+
 @router.message(CommandStart())
 @router.message(Command("menu"))
 @router.message(F.text.func(is_worker_menu_alias))
@@ -141,7 +162,7 @@ async def show_menu(message: Message, state: FSMContext) -> None:
     )
     if worker:
         await _send_worker_menu_message(message)
-    if is_admin(message.from_user.id):
+    if is_admin(message.from_user.id) and message.chat.type == "private":
         await send_admin_menu_message(message)
 
 

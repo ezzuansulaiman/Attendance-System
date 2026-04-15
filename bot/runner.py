@@ -6,17 +6,18 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.bot_handlers import router, set_bot_commands
+from bot.db_storage import DatabaseStorage
 from bot.reminders import run_attendance_reminder_loop
 from config import get_settings
+from models.database import async_session_factory
 
 logger = logging.getLogger(__name__)
 
 
 def build_dispatcher() -> Dispatcher:
-    dispatcher = Dispatcher(storage=MemoryStorage())
+    dispatcher = Dispatcher(storage=DatabaseStorage(async_session_factory))
     dispatcher.include_router(router)
     return dispatcher
 
