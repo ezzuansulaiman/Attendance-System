@@ -381,10 +381,13 @@ async def prompt_photo_again(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "leave:confirm")
 async def confirm_leave_request(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.answer()
     if await state.get_state() != LeaveApplicationStates.confirmation.state:
-        await callback.message.answer("Permohonan ini sudah tidak aktif. Sila mulakan semula dari menu.")
+        await callback.answer(
+            "Permohonan ini sudah tidak aktif. Sila mulakan semula dari menu.",
+            show_alert=True,
+        )
         return
+    await callback.answer()
     await _submit_leave_request(callback.message, state, telegram_user_id=callback.from_user.id)
 
 
