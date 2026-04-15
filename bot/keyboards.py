@@ -116,6 +116,7 @@ def admin_menu_keyboard(*, web_login_url: Optional[str] = None) -> InlineKeyboar
             InlineKeyboardButton(text="Excel Bulan Semasa", callback_data="admin:report:current:excel"),
             InlineKeyboardButton(text="Excel Bulan Lepas", callback_data="admin:report:previous:excel"),
         ],
+        [InlineKeyboardButton(text="Hantar Panduan ke Group", callback_data="admin:broadcast:guide")],
     ]
     if web_login_url:
         inline_keyboard.append([InlineKeyboardButton(text="Buka Admin Web", url=web_login_url)])

@@ -42,6 +42,35 @@ def worker_menu_text() -> str:
     )
 
 
+def build_bot_guide_text() -> str:
+    return (
+        "<b>PANDUAN PENGGUNAAN BOT KEHADIRAN</b>\n\n"
+        "<b>KEHADIRAN HARIAN</b>\n"
+        "Tekan butang <b>Menu Kehadiran</b> (atau taip <code>menu</code>) untuk buka menu.\n"
+        "• <b>Rekod Masuk</b> — Tekan bila tiba di tempat kerja\n"
+        "• <b>Rekod Keluar</b> — Tekan bila selesai bertugas\n\n"
+        "<b>PERMOHONAN CUTI</b>\n"
+        "• Tekan <b>Mohon Cuti</b> dalam menu\n"
+        "• Tekan butang <b>Mohon Cuti Sekarang</b> yang muncul — ini akan buka chat peribadi dengan bot\n"
+        "• Dalam chat peribadi, pilih jenis cuti dan ikuti langkah-langkah:\n"
+        "   ① Pilih jenis cuti (Tahunan / Sakit / Kecemasan)\n"
+        "   ② Masukkan tarikh mula (format: YYYY-MM-DD atau DD/MM/YYYY)\n"
+        "   ③ Masukkan tarikh akhir\n"
+        "   ④ Masukkan alasan ringkas\n"
+        "   ⑤ Muat naik gambar sokongan (untuk Cuti Sakit &amp; Kecemasan sahaja)\n"
+        "   ⑥ Tekan <b>Sahkan</b> untuk hantar\n\n"
+        "<b>JENIS CUTI</b>\n"
+        f"• <b>Cuti Tahunan</b> — {annual_leave_notice_text()}\n"
+        "• <b>Cuti Sakit (MC)</b> — Wajib muat naik gambar MC/surat doktor\n"
+        "• <b>Cuti Kecemasan</b> — Wajib muat naik gambar sokongan\n\n"
+        "<b>MAKLUMAT LAIN</b>\n"
+        "• <b>Status Hari Ini</b> — Semak rekod kehadiran dan cuti hari ini\n"
+        "• <b>Cuti Saya</b> — Lihat sejarah 5 permohonan cuti terkini\n"
+        "• <b>Profil Saya</b> — Lihat maklumat profil anda\n\n"
+        "Sebarang masalah, sila hubungi admin."
+    )
+
+
 def build_attendance_reminder_text(reminder_type: str, *, pending_names: Optional[list[str]] = None) -> str:
     pending_names = pending_names or []
     if pending_names:

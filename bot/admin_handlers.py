@@ -16,7 +16,9 @@ from bot.keyboards import (
     admin_report_site_keyboard,
     is_admin_menu_alias,
     leave_review_keyboard,
+    worker_menu_keyboard,
 )
+from bot.reminders import extract_reminder_chat_ids
 from bot.notifications import send_leave_review_to_worker
 from bot.messages import (
     admin_menu_text,
@@ -24,6 +26,7 @@ from bot.messages import (
     build_admin_report_month_picker_text,
     build_admin_report_site_picker_text,
     build_admin_today_summary_text,
+    build_bot_guide_text,
     build_leave_summary_text,
     build_monthly_report_summary_text,
 )
@@ -218,6 +221,39 @@ async def admin_menu_from_callback(callback: CallbackQuery) -> None:
     if not await _require_admin(callback):
         return
     await send_admin_menu_message(callback.message)
+
+
+@router.callback_query(F.data == "admin:broadcast:guide")
+async def broadcast_bot_guide(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not await _require_admin(callback):
+        return
+
+    async with session_scope() as session:
+        sites = await list_sites(session, active_only=True)
+
+    chat_ids = extract_reminder_chat_ids(list(sites), settings.group_id)
+    if not chat_ids:
+        await callback.message.answer("Tiada group Telegram yang dikonfigurasi. Sila tetapkan GROUP_ID atau telegram_group_id untuk site.")
+        return
+
+    guide_text = build_bot_guide_text()
+    sent = 0
+    for chat_id in chat_ids:
+        try:
+            await callback.bot.send_message(
+                chat_id=chat_id,
+                text=guide_text,
+                reply_markup=worker_menu_keyboard(),
+            )
+            sent += 1
+        except Exception:
+            pass
+
+    if sent:
+        await callback.message.answer(f"Panduan berjaya dihantar ke {sent} group.")
+    else:
+        await callback.message.answer("Panduan gagal dihantar. Pastikan bot adalah ahli group dan mempunyai kebenaran menghantar mesej.")
 
 
 @router.callback_query(F.data == "admin:pending")
