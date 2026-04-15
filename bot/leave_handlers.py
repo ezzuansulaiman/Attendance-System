@@ -244,14 +244,17 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot)
 @router.callback_query(F.data.startswith("leave:type:"))
 async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
     current_state = await state.get_state()
-    # Block if mid-flow at a DIFFERENT step — would disrupt active data
-    if current_state is not None and current_state != LeaveApplicationStates.leave_type.state:
+    # Allow picking/changing leave type at the type-selection step or
+    # at start_date (user hasn't entered any date yet — safe to change type).
+    # Block if deeper in the flow where changing type would discard entered data.
+    _allowed = {LeaveApplicationStates.leave_type.state, LeaveApplicationStates.start_date.state}
+    if current_state is not None and current_state not in _allowed:
         await callback.answer(
-            "Permohonan ini sudah tidak aktif. Sila mulakan semula dari menu.",
+            "Untuk tukar jenis cuti, tekan butang Kembali dahulu.",
             show_alert=True,
         )
         return
-    # No active flow (stale button) — restart cleanly from leave_type step
+    # No active flow (stale button from old session) — restart cleanly
     if current_state is None:
         await state.set_state(LeaveApplicationStates.leave_type)
     await callback.answer()
