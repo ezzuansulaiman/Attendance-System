@@ -59,7 +59,8 @@ def test_confirm_leave_request_uses_callback_user_id_for_submission(monkeypatch)
     assert captured["telegram_user_id"] == callback.from_user.id
 
 
-def test_confirm_leave_request_shows_alert_when_state_mismatch(monkeypatch) -> None:
+def test_confirm_leave_request_shows_soft_toast_when_no_active_flow(monkeypatch) -> None:
+    """When state is not the confirmation step, a soft toast (no blocking popup) is shown."""
     callback = DummyCallback()
     state = DummyState("some:other:state")
     dummy_bot = object()
@@ -67,5 +68,6 @@ def test_confirm_leave_request_shows_alert_when_state_mismatch(monkeypatch) -> N
     asyncio.run(confirm_leave_request(callback, state, dummy_bot))
 
     assert callback.answer_calls == 1
-    assert callback.answer_kwargs[0]["show_alert"] is True
-    assert "tidak aktif" in callback.answer_kwargs[0]["text"]
+    # Must NOT use show_alert=True — that creates a blocking popup which is the bug we fixed
+    assert callback.answer_kwargs[0].get("show_alert") is not True
+    assert callback.answer_kwargs[0]["text"] != ""
