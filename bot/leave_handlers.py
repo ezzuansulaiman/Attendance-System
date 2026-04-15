@@ -236,6 +236,12 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot)
 
 @router.callback_query(F.data.startswith("leave:type:"))
 async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
+    if await state.get_state() != LeaveApplicationStates.leave_type.state:
+        await callback.answer(
+            "Permohonan ini sudah tidak aktif. Sila mulakan semula dari menu.",
+            show_alert=True,
+        )
+        return
     await callback.answer()
     leave_type = callback.data.split(":")[-1]
     if not is_supported_leave_type(leave_type):
@@ -328,6 +334,12 @@ async def capture_end_date(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("leave:portion:"))
 async def pick_leave_day_portion(callback: CallbackQuery, state: FSMContext) -> None:
+    if await state.get_state() != LeaveApplicationStates.day_portion.state:
+        await callback.answer(
+            "Permohonan ini sudah tidak aktif. Sila mulakan semula dari menu.",
+            show_alert=True,
+        )
+        return
     await callback.answer()
     day_portion = callback.data.split(":")[-1]
     if not is_supported_leave_day_portion(day_portion):
@@ -404,12 +416,20 @@ async def confirm_leave_request(callback: CallbackQuery, state: FSMContext, bot:
 
 @router.callback_query(F.data == LEAVE_BACK_CALLBACK)
 async def handle_leave_back_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current is None or not current.startswith("LeaveApplicationStates:"):
+        await callback.answer("Tiada permohonan aktif.", show_alert=True)
+        return
     await callback.answer()
     await _step_back_in_leave_flow(callback.message, state)
 
 
 @router.callback_query(F.data == LEAVE_CANCEL_CALLBACK)
 async def handle_leave_cancel_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current is None or not current.startswith("LeaveApplicationStates:"):
+        await callback.answer("Tiada permohonan aktif untuk dibatalkan.", show_alert=True)
+        return
     await callback.answer()
     await _cancel_leave_flow(callback.message, state)
 
