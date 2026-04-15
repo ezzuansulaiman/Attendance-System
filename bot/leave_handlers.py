@@ -28,6 +28,7 @@ from models import session_scope
 from services.attendance_service import get_worker_by_telegram_id
 from services.leave_service import (
     LeaveError,
+    annual_leave_notice_met,
     annual_leave_notice_text,
     create_leave_request,
     is_supported_leave_day_portion,
@@ -66,8 +67,14 @@ async def _submit_leave_request(message: Message, state: FSMContext, bot: Bot, *
                 telegram_file_id=data.get("telegram_file_id"),
             )
         except LeaveError as exc:
-            await message.answer(str(exc))
-            await state.clear()
+            await message.answer(
+                str(exc) + "\n\nTekan <b>Kembali</b> untuk tukar tarikh atau <b>Batal</b> untuk keluar.",
+                reply_markup=confirmation_keyboard(
+                    confirm_callback="leave:confirm",
+                    back_callback=LEAVE_BACK_CALLBACK,
+                    cancel_callback=LEAVE_CANCEL_CALLBACK,
+                ),
+            )
             return
 
     await message.answer(
@@ -293,6 +300,14 @@ async def capture_start_date(message: Message, state: FSMContext) -> None:
         start_date = parse_user_date(message.text or "")
     except ValueError as exc:
         await message.answer(str(exc))
+        return
+
+    data = await state.get_data()
+    if not annual_leave_notice_met(leave_type=data.get("leave_type", ""), start_date=start_date):
+        await message.answer(
+            annual_leave_notice_text()
+            + "\nSila masukkan semula tarikh mula yang memenuhi syarat notis."
+        )
         return
 
     await state.update_data(start_date=start_date)

@@ -131,7 +131,8 @@ def _today_local_date() -> date:
     return datetime.now(settings.local_timezone).date()
 
 
-def _annual_leave_notice_met(*, leave_type: str, start_date: date, reference_date: Optional[date] = None) -> bool:
+def annual_leave_notice_met(*, leave_type: str, start_date: date, reference_date: Optional[date] = None) -> bool:
+    """Return True if the annual leave notice period requirement is satisfied."""
     if leave_type != "annual":
         return True
     notice_days = annual_leave_notice_days()
@@ -142,7 +143,7 @@ def _annual_leave_notice_met(*, leave_type: str, start_date: date, reference_dat
 
 
 def _validate_annual_leave_notice(*, leave_type: str, start_date: date, reference_date: Optional[date] = None) -> None:
-    if not _annual_leave_notice_met(leave_type=leave_type, start_date=start_date, reference_date=reference_date):
+    if not annual_leave_notice_met(leave_type=leave_type, start_date=start_date, reference_date=reference_date):
         raise LeaveError(annual_leave_notice_text())
 
 
@@ -360,7 +361,7 @@ async def approve_leave_request(
     admin_telegram_id: int,
     notes: Optional[str] = None,
 ) -> LeaveRequest:
-    if not _annual_leave_notice_met(
+    if not annual_leave_notice_met(
         leave_type=leave_request.leave_type,
         start_date=leave_request.start_date,
     ):
