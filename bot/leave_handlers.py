@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
@@ -41,7 +41,7 @@ LEAVE_BACK_CALLBACK = "leave:back"
 LEAVE_CANCEL_CALLBACK = "leave:cancel"
 
 
-async def _submit_leave_request(message: Message, state: FSMContext, *, telegram_user_id: int) -> None:
+async def _submit_leave_request(message: Message, state: FSMContext, bot: Bot, *, telegram_user_id: int) -> None:
     data = await state.get_data()
     async with session_scope() as session:
         worker = await get_worker_by_telegram_id(session, telegram_user_id, active_only=False)
@@ -82,13 +82,13 @@ async def _submit_leave_request(message: Message, state: FSMContext, *, telegram
         )
         + "\nStatus: DALAM SEMAKAN"
     )
-    await send_leave_request_to_admins(message.bot, leave_request.id)
+    await send_leave_request_to_admins(bot, leave_request.id)
     await state.clear()
 
 
 async def _show_leave_type_prompt(target: Message, *, editing: bool = False) -> None:
     intro = "Sila pilih jenis cuti." if not editing else "Baik, sila pilih semula jenis cuti."
-    await target.answer(intro, reply_markup=leave_type_keyboard())
+    await target.answer(intro, reply_markup=leave_type_keyboard(cancel_callback=LEAVE_CANCEL_CALLBACK))
 
 
 async def _show_leave_day_portion_prompt(target: Message) -> None:
@@ -204,7 +204,7 @@ async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "leave:start")
-async def start_leave_flow(callback: CallbackQuery, state: FSMContext) -> None:
+async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     await callback.answer()
     worker_access = await load_worker_access(callback.from_user.id)
     if worker_access.is_inactive:
@@ -219,7 +219,7 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     if callback.message.chat.type in {"group", "supergroup"}:
-        bot_info = await callback.bot.get_me()
+        bot_info = await bot.get_me()
         deep_link_url = f"https://t.me/{bot_info.username}?start=leave"
         await callback.message.answer(
             "Sila mohon cuti melalui chat peribadi bot untuk memastikan privasi maklumat anda.",
@@ -391,7 +391,7 @@ async def prompt_photo_again(message: Message, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "leave:confirm")
-async def confirm_leave_request(callback: CallbackQuery, state: FSMContext) -> None:
+async def confirm_leave_request(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     if await state.get_state() != LeaveApplicationStates.confirmation.state:
         await callback.answer(
             "Permohonan ini sudah tidak aktif. Sila mulakan semula dari menu.",
@@ -399,7 +399,7 @@ async def confirm_leave_request(callback: CallbackQuery, state: FSMContext) -> N
         )
         return
     await callback.answer()
-    await _submit_leave_request(callback.message, state, telegram_user_id=callback.from_user.id)
+    await _submit_leave_request(callback.message, state, bot, telegram_user_id=callback.from_user.id)
 
 
 @router.callback_query(F.data == LEAVE_BACK_CALLBACK)

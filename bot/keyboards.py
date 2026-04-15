@@ -70,13 +70,13 @@ def worker_menu_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def leave_type_keyboard() -> InlineKeyboardMarkup:
+def leave_type_keyboard(*, cancel_callback: str = CANCEL_CALLBACK) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Cuti Tahunan", callback_data="leave:type:annual")],
             [InlineKeyboardButton(text="Cuti Sakit", callback_data="leave:type:mc")],
             [InlineKeyboardButton(text="Cuti Kecemasan", callback_data="leave:type:emergency")],
-            [InlineKeyboardButton(text="Batal", callback_data=CANCEL_CALLBACK)],
+            [InlineKeyboardButton(text="Batal", callback_data=cancel_callback)],
         ]
     )
 

@@ -131,7 +131,7 @@ async def handle_deep_link_start(message: Message, command: CommandObject, state
 
     await state.clear()
     await state.set_state(LeaveApplicationStates.leave_type)
-    await message.answer("Sila pilih jenis cuti.", reply_markup=leave_type_keyboard())
+    await message.answer("Sila pilih jenis cuti.", reply_markup=leave_type_keyboard(cancel_callback="leave:cancel"))
 
 
 @router.message(CommandStart())
@@ -162,7 +162,7 @@ async def show_menu(message: Message, state: FSMContext) -> None:
     )
     if worker:
         await _send_worker_menu_message(message)
-    if is_admin(message.from_user.id):
+    if is_admin(message.from_user.id) and message.chat.type == "private":
         await send_admin_menu_message(message)
 
 

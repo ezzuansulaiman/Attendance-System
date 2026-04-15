@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import calendar
+import logging
 from datetime import date, datetime
+
+logger = logging.getLogger(__name__)
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
@@ -16,7 +19,6 @@ from bot.keyboards import (
     admin_report_site_keyboard,
     is_admin_menu_alias,
     leave_review_keyboard,
-    worker_menu_keyboard,
 )
 from bot.reminders import extract_reminder_chat_ids
 from bot.notifications import send_leave_review_to_worker
@@ -224,7 +226,7 @@ async def admin_menu_from_callback(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "admin:broadcast:guide")
-async def broadcast_bot_guide(callback: CallbackQuery) -> None:
+async def broadcast_bot_guide(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
     if not await _require_admin(callback):
         return
@@ -234,26 +236,29 @@ async def broadcast_bot_guide(callback: CallbackQuery) -> None:
 
     chat_ids = extract_reminder_chat_ids(list(sites), settings.group_id)
     if not chat_ids:
-        await callback.message.answer("Tiada group Telegram yang dikonfigurasi. Sila tetapkan GROUP_ID atau telegram_group_id untuk site.")
+        await callback.message.answer(
+            "Tiada group Telegram yang dikonfigurasi. Sila tetapkan GROUP_ID atau telegram_group_id untuk site."
+        )
         return
 
     guide_text = build_bot_guide_text()
     sent = 0
+    failed = 0
     for chat_id in chat_ids:
         try:
-            await callback.bot.send_message(
-                chat_id=chat_id,
-                text=guide_text,
-                reply_markup=worker_menu_keyboard(),
-            )
+            await bot.send_message(chat_id=chat_id, text=guide_text)
             sent += 1
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to send guide to chat %s: %s", chat_id, exc)
+            failed += 1
 
     if sent:
-        await callback.message.answer(f"Panduan berjaya dihantar ke {sent} group.")
+        suffix = f" ({failed} group gagal)" if failed else ""
+        await callback.message.answer(f"Panduan berjaya dihantar ke {sent} group{suffix}.")
     else:
-        await callback.message.answer("Panduan gagal dihantar. Pastikan bot adalah ahli group dan mempunyai kebenaran menghantar mesej.")
+        await callback.message.answer(
+            "Panduan gagal dihantar ke semua group. Pastikan bot adalah ahli group dan mempunyai kebenaran menghantar mesej."
+        )
 
 
 @router.callback_query(F.data == "admin:pending")
@@ -468,7 +473,7 @@ async def send_previous_month_excel(callback: CallbackQuery) -> None:
     await _send_monthly_excel(callback, year=year, month=month)
 
 
-async def _review_leave(callback: CallbackQuery, *, approve: bool) -> None:
+async def _review_leave(callback: CallbackQuery, bot: Bot, *, approve: bool) -> None:
     if not await _require_admin(callback):
         return
 
@@ -502,19 +507,19 @@ async def _review_leave(callback: CallbackQuery, *, approve: bool) -> None:
     else:
         action_label = "ditolak"
     await callback.message.answer(f"Permohonan cuti #{leave_request.id} telah {action_label}.")
-    await send_leave_review_to_worker(callback.bot, leave_request.id)
+    await send_leave_review_to_worker(bot, leave_request.id)
 
 
 @router.callback_query(F.data.startswith("leave:approve:"))
-async def approve_leave(callback: CallbackQuery) -> None:
+async def approve_leave(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
-    await _review_leave(callback, approve=True)
+    await _review_leave(callback, bot, approve=True)
 
 
 @router.callback_query(F.data.startswith("leave:reject:"))
-async def reject_leave(callback: CallbackQuery) -> None:
+async def reject_leave(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
-    await _review_leave(callback, approve=False)
+    await _review_leave(callback, bot, approve=False)
 
 
 async def set_bot_commands(bot: Bot) -> None:
