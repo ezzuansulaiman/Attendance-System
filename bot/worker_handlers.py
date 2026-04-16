@@ -25,7 +25,6 @@ from bot.keyboards import (
     is_back_alias,
     is_cancel_alias,
     is_worker_menu_alias,
-    leave_type_keyboard,
     main_menu_keyboard,
     worker_menu_keyboard,
 )
@@ -40,7 +39,7 @@ from bot.messages import (
     worker_menu_text,
 )
 from datetime_utils import format_local_datetime
-from bot.states import LeaveApplicationStates, RegistrationStates
+from bot.states import RegistrationStates
 from models import session_scope
 from services.attendance_service import (
     AttendanceError,
@@ -120,18 +119,13 @@ async def handle_deep_link_start(message: Message, command: CommandObject, state
         await show_menu(message, state)
         return
 
-    worker_access = await load_worker_access(message.from_user.id)
-    if worker_access.is_inactive:
-        await message.answer(inactive_worker_text())
-        return
-    worker = worker_access.worker
-    if not worker:
-        await message.answer(registered_workers_only_text())
-        return
-
-    await state.clear()
-    await state.set_state(LeaveApplicationStates.leave_type)
-    await message.answer("Sila pilih jenis cuti.", reply_markup=leave_type_keyboard(cancel_callback="leave:cancel"))
+    # Leave applications now happen directly in the group chat so that admins
+    # and team members can see the request and supporting photo in real time.
+    # Redirect workers back to the group instead of starting a private flow.
+    await message.answer(
+        "Permohonan cuti perlu dibuat dalam group site anda. "
+        "Sila pergi ke group dan tekan butang <b>Mohon Cuti</b> dari sana."
+    )
 
 
 @router.message(CommandStart())
