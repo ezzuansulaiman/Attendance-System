@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from datetime_utils import format_local_datetime
-from services.leave_service import annual_leave_notice_text, leave_duration_days, leave_label, leave_requires_photo
+from services.leave_service import annual_leave_notice_text, leave_duration_days, leave_label
 
 
 def format_display_date(value: date) -> str:
@@ -51,13 +51,15 @@ def build_bot_guide_text() -> str:
         "• <b>Rekod Keluar</b> — Tekan bila selesai bertugas\n\n"
         "<b>PERMOHONAN CUTI</b>\n"
         "• Tekan <b>Mohon Cuti</b> dalam menu group ini\n"
-        "• Ikuti langkah-langkah terus dalam group:\n"
+        "• Bot akan hantar pautan — klik untuk sambung dalam chat peribadi\n"
+        "• Ikuti langkah dalam chat peribadi:\n"
         "   ① Pilih jenis cuti (Tahunan / Sakit / Kecemasan)\n"
         "   ② Masukkan tarikh mula (format: YYYY-MM-DD atau DD/MM/YYYY)\n"
         "   ③ Masukkan tarikh akhir\n"
         "   ④ Masukkan alasan ringkas\n"
-        "   ⑤ Muat naik gambar sokongan dalam group ini (untuk Cuti Sakit &amp; Kecemasan sahaja)\n"
-        "   ⑥ Tekan <b>Sahkan</b> untuk hantar\n\n"
+        "   ⑤ Muat naik gambar sokongan (untuk Cuti Sakit &amp; Kecemasan sahaja)\n"
+        "   ⑥ Tekan <b>Sahkan</b> untuk hantar\n"
+        "• Setelah dihantar, makluman akan dipaparkan dalam group site\n\n"
         "<b>JENIS CUTI</b>\n"
         f"• <b>Cuti Tahunan</b> — {annual_leave_notice_text()}\n"
         "• <b>Cuti Sakit (MC)</b> — Wajib muat naik gambar MC/surat doktor\n"
@@ -259,9 +261,10 @@ def build_leave_confirmation_text(
     has_supporting_photo: bool,
 ) -> str:
     document_line = "Ada" if has_supporting_photo else "Tiada"
-    group_notice = ""
-    if leave_requires_photo(leave_type):
+    if has_supporting_photo:
         group_notice = "\nMakluman Group: Bukti sokongan dan alasan akan dihantar ke group site."
+    else:
+        group_notice = "\nMakluman Group: Permohonan ini akan dimaklumkan ke group site."
     return (
         "<b>Sahkan Permohonan Cuti</b>\n"
         f"Pekerja: {worker_name}\n"
