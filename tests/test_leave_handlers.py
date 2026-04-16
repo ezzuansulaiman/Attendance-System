@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from bot.leave_handlers import confirm_leave_request
+from bot.leave_handlers import confirm_leave_request, pick_leave_type
 from bot.states import LeaveApplicationStates
 
 
@@ -29,9 +29,16 @@ class DummyCallback:
 class DummyState:
     def __init__(self, current_state: str) -> None:
         self.current_state = current_state
+        self.data: dict[str, object] = {}
 
     async def get_state(self) -> str:
         return self.current_state
+
+    async def set_state(self, new_state: str) -> None:
+        self.current_state = new_state
+
+    async def update_data(self, **kwargs) -> None:
+        self.data.update(kwargs)
 
 
 def test_confirm_leave_request_uses_callback_user_id_for_submission(monkeypatch) -> None:
@@ -71,3 +78,26 @@ def test_confirm_leave_request_shows_soft_toast_when_no_active_flow(monkeypatch)
     # Must NOT use show_alert=True — that creates a blocking popup which is the bug we fixed
     assert callback.answer_kwargs[0].get("show_alert") is not True
     assert callback.answer_kwargs[0]["text"] != ""
+
+
+def test_pick_leave_type_allows_mc_without_group_mapping(monkeypatch) -> None:
+    callback = DummyCallback()
+    callback.data = "leave:type:mc"
+    callback.message.chat = SimpleNamespace(type="private")
+    state = DummyState(LeaveApplicationStates.leave_type.state)
+
+    async def _fake_load_worker_access(_telegram_id: int):
+        return SimpleNamespace(
+            is_inactive=False,
+            worker=SimpleNamespace(site=SimpleNamespace(telegram_group_id=None)),
+        )
+
+    monkeypatch.setattr("bot.leave_handlers.load_worker_access", _fake_load_worker_access)
+    monkeypatch.setattr("bot.leave_handlers.worker_group_id", lambda _worker: None)
+
+    asyncio.run(pick_leave_type(callback, state))
+
+    assert state.current_state == LeaveApplicationStates.start_date.state
+    assert state.data["leave_type"] == "mc"
+    assert state.data["group_delivery_unavailable"] is True
+    assert any("boleh dihantar" in text for text in callback.message.answers)

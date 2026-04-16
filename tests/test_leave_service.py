@@ -11,6 +11,7 @@ from models.models import Site, Worker
 from services.leave_service import (
     LeaveError,
     admin_upsert_single_day_leave,
+    annual_leave_notice_days,
     approve_leave_request,
     create_leave_request,
     delete_leave_request,
@@ -242,7 +243,8 @@ async def _test_create_leave_request_rejects_annual_leave_without_notice_period(
             await session.commit()
             await session.refresh(worker)
 
-            with pytest.raises(LeaveError, match="sekurang-kurangnya 5 hari"):
+            expected_notice_days = annual_leave_notice_days()
+            with pytest.raises(LeaveError, match=rf"sekurang-kurangnya {expected_notice_days} hari"):
                 await create_leave_request(
                     session,
                     worker=worker,
@@ -301,8 +303,10 @@ async def _test_approve_leave_request_auto_rejects_late_annual_leave(tmp_path: P
             )
 
             assert reviewed_request.status == "rejected"
+            expected_notice_days = annual_leave_notice_days()
             assert reviewed_request.review_notes == (
-                "Ditolak automatik kerana permohonan Cuti Tahunan dibuat kurang daripada 5 hari sebelum tarikh mula."
+                "Ditolak automatik kerana permohonan Cuti Tahunan dibuat kurang daripada "
+                f"{expected_notice_days} hari sebelum tarikh mula."
             )
     finally:
         await engine.dispose()

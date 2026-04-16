@@ -70,10 +70,11 @@ async def _show_leave_day_portion_prompt(target: Message) -> None:
     )
 
 
-def _required_group_support_text() -> str:
+def _group_not_configured_notice_text() -> str:
     return (
-        "Cuti Sakit dan Cuti Kecemasan memerlukan bukti sokongan di group site bersama alasan. "
-        "Sila hubungi admin jika group Telegram site anda belum ditetapkan."
+        "Group Telegram site anda belum ditetapkan. "
+        "Permohonan Cuti Sakit atau Cuti Kecemasan masih boleh dihantar, "
+        "tetapi bukti hanya akan dihantar kepada admin sehingga group site disediakan."
     )
 
 
@@ -296,9 +297,10 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
             await state.clear()
             return
         if worker_group_id(worker) is None:
-            await callback.message.answer(_required_group_support_text())
-            await state.clear()
-            return
+            await callback.message.answer(_group_not_configured_notice_text())
+            await state.update_data(group_delivery_unavailable=True)
+        else:
+            await state.update_data(group_delivery_unavailable=False)
 
     await state.update_data(leave_type=leave_type)
     await state.set_state(LeaveApplicationStates.start_date)
@@ -450,8 +452,17 @@ async def capture_reason(message: Message, state: FSMContext) -> None:
     await state.update_data(reason=reason)
     if leave_requires_photo(data["leave_type"]):
         await state.set_state(LeaveApplicationStates.photo)
+        photo_prompt = (
+            "Sila muat naik gambar sokongan sekarang. "
+            "Bukti ini akan dihantar ke group site bersama alasan."
+        )
+        if data.get("group_delivery_unavailable"):
+            photo_prompt = (
+                "Sila muat naik gambar sokongan sekarang. "
+                "Bukti ini akan dihantar kepada admin dahulu kerana group site belum dikonfigurasi."
+            )
         await message.answer(
-            "Sila muat naik gambar sokongan sekarang. Bukti ini akan dihantar ke group site bersama alasan.",
+            photo_prompt,
             reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
         )
         return
@@ -481,7 +492,7 @@ async def prompt_photo_again(message: Message, state: FSMContext) -> None:
         return
     await message.answer(
         "Gambar sokongan diperlukan untuk Cuti Sakit dan Cuti Kecemasan. "
-        "Sila muat naik imej supaya bukti boleh dilampirkan ke group site bersama alasan."
+        "Sila muat naik imej supaya bukti boleh dilampirkan bersama alasan."
     )
 
 
