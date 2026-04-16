@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from bot.leave_handlers import confirm_leave_request, pick_leave_type
+from bot.leave_handlers import _classify_leave_error_reason, confirm_leave_request, pick_leave_type
 from bot.states import LeaveApplicationStates
 
 
@@ -101,3 +101,9 @@ def test_pick_leave_type_allows_mc_without_group_mapping(monkeypatch) -> None:
     assert state.data["leave_type"] == "mc"
     assert state.data["group_delivery_unavailable"] is True
     assert any("boleh dihantar" in text for text in callback.message.answers)
+
+
+def test_classify_leave_error_reason_uses_expected_codes() -> None:
+    assert _classify_leave_error_reason("Sudah ada permohonan cuti yang bertindih.") == "overlap_existing_leave"
+    assert _classify_leave_error_reason("Gambar sokongan Telegram diperlukan.") == "missing_supporting_photo"
+    assert _classify_leave_error_reason("Permohonan perlu dibuat sekurang-kurangnya 3 hari.") == "annual_notice_failed"

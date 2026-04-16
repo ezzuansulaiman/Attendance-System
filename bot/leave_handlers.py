@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -38,8 +40,33 @@ from services.leave_service import (
 )
 
 router = Router()
+logger = logging.getLogger(__name__)
 LEAVE_BACK_CALLBACK = "leave:back"
 LEAVE_CANCEL_CALLBACK = "leave:cancel"
+
+
+def _log_leave_block(reason_code: str, *, telegram_user_id: int, chat_type: str) -> None:
+    logger.info(
+        "leave_apply_blocked reason=%s telegram_user_id=%s chat_type=%s",
+        reason_code,
+        telegram_user_id,
+        chat_type,
+    )
+
+
+def _classify_leave_error_reason(error_message: str) -> str:
+    normalized = error_message.lower()
+    if "bertindih" in normalized:
+        return "overlap_existing_leave"
+    if "gambar sokongan" in normalized:
+        return "missing_supporting_photo"
+    if "sekurang-kurangnya" in normalized:
+        return "annual_notice_failed"
+    if "tarikh akhir" in normalized:
+        return "invalid_date_range"
+    if "bahagian hari" in normalized:
+        return "invalid_day_portion"
+    return "service_validation_failed"
 
 
 def _in_leave_flow(state: str | None) -> bool:
@@ -83,10 +110,12 @@ async def _show_leave_confirmation(message: Message, state: FSMContext, *, teleg
     async with session_scope() as session:
         worker = await get_worker_by_telegram_id(session, telegram_user_id, active_only=False)
     if not worker:
+        _log_leave_block("worker_not_registered", telegram_user_id=telegram_user_id, chat_type=message.chat.type)
         await message.answer(registered_workers_only_text())
         await state.clear()
         return
     if worker.is_active is False:
+        _log_leave_block("worker_inactive", telegram_user_id=telegram_user_id, chat_type=message.chat.type)
         await message.answer(inactive_worker_text())
         await state.clear()
         return
@@ -115,10 +144,12 @@ async def _submit_leave_request(message: Message, state: FSMContext, bot: Bot, *
     async with session_scope() as session:
         worker = await get_worker_by_telegram_id(session, telegram_user_id, active_only=False)
         if not worker:
+            _log_leave_block("worker_not_registered", telegram_user_id=telegram_user_id, chat_type=message.chat.type)
             await message.answer(registered_workers_only_text())
             await state.clear()
             return
         if worker.is_active is False:
+            _log_leave_block("worker_inactive", telegram_user_id=telegram_user_id, chat_type=message.chat.type)
             await message.answer(inactive_worker_text())
             await state.clear()
             return
@@ -135,6 +166,11 @@ async def _submit_leave_request(message: Message, state: FSMContext, bot: Bot, *
                 telegram_file_id=data.get("telegram_file_id"),
             )
         except LeaveError as exc:
+            _log_leave_block(
+                _classify_leave_error_reason(str(exc)),
+                telegram_user_id=telegram_user_id,
+                chat_type=message.chat.type,
+            )
             # Keep state alive so the user can press Back to fix the issue instead of starting over
             await message.answer(
                 str(exc) + "\n\nTekan <b>Kembali</b> untuk tukar maklumat atau <b>Batal</b> untuk keluar.",
@@ -235,13 +271,24 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot)
     await callback.answer()
     worker_access = await load_worker_access(callback.from_user.id)
     if worker_access.is_inactive:
+        _log_leave_block("worker_inactive", telegram_user_id=callback.from_user.id, chat_type=callback.message.chat.type)
         await callback.message.answer(inactive_worker_text())
         return
     worker = worker_access.worker
     if not worker:
+        _log_leave_block(
+            "worker_not_registered",
+            telegram_user_id=callback.from_user.id,
+            chat_type=callback.message.chat.type,
+        )
         await callback.message.answer(registered_workers_only_text())
         return
     if not worker_chat_is_allowed(worker, callback):
+        _log_leave_block(
+            "chat_not_allowed",
+            telegram_user_id=callback.from_user.id,
+            chat_type=callback.message.chat.type,
+        )
         await callback.message.answer(leave_restriction_text())
         return
 
@@ -288,15 +335,30 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
     if leave_requires_photo(leave_type):
         worker_access = await load_worker_access(callback.from_user.id)
         if worker_access.is_inactive:
+            _log_leave_block(
+                "worker_inactive",
+                telegram_user_id=callback.from_user.id,
+                chat_type=callback.message.chat.type,
+            )
             await callback.message.answer(inactive_worker_text())
             await state.clear()
             return
         worker = worker_access.worker
         if not worker:
+            _log_leave_block(
+                "worker_not_registered",
+                telegram_user_id=callback.from_user.id,
+                chat_type=callback.message.chat.type,
+            )
             await callback.message.answer(registered_workers_only_text())
             await state.clear()
             return
         if worker_group_id(worker) is None:
+            _log_leave_block(
+                "group_not_configured",
+                telegram_user_id=callback.from_user.id,
+                chat_type=callback.message.chat.type,
+            )
             await callback.message.answer(_group_not_configured_notice_text())
             await state.update_data(group_delivery_unavailable=True)
         else:
@@ -336,6 +398,7 @@ async def capture_start_date(message: Message, state: FSMContext) -> None:
 
     data = await state.get_data()
     if not annual_leave_notice_met(leave_type=data.get("leave_type", ""), start_date=start_date):
+        _log_leave_block("annual_notice_failed", telegram_user_id=message.from_user.id, chat_type=message.chat.type)
         await message.answer(
             annual_leave_notice_text() + "\nSila masukkan semula tarikh mula yang memenuhi syarat notis."
         )
@@ -371,6 +434,7 @@ async def capture_end_date(message: Message, state: FSMContext) -> None:
 
     data = await state.get_data()
     if end_date < data["start_date"]:
+        _log_leave_block("invalid_date_range", telegram_user_id=message.from_user.id, chat_type=message.chat.type)
         await message.answer("Tarikh akhir tidak boleh lebih awal daripada tarikh mula.")
         return
 
@@ -445,6 +509,7 @@ async def capture_reason(message: Message, state: FSMContext) -> None:
 
     reason = (message.text or "").strip()
     if not reason:
+        _log_leave_block("missing_reason", telegram_user_id=message.from_user.id, chat_type=message.chat.type)
         await message.answer("Sebab permohonan cuti diperlukan.")
         return
 

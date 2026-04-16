@@ -126,6 +126,39 @@
                 <li>Clear pending leave approvals early so schedule changes reach workers sooner.</li>
             </ul>
         </section>
+
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Telegram Config Health</h2>
+                    <p>Quick checks for leave routing reliability.</p>
+                </div>
+                {% if telegram_config_health.has_issues %}
+                <span class="status-pill warning">Action Needed</span>
+                {% else %}
+                <span class="status-pill success">Healthy</span>
+                {% endif %}
+            </div>
+            <ul class="bullet-list" style="margin-top: 0;">
+                <li>
+                    Fallback `GROUP_ID`:
+                    {% if telegram_config_health.fallback_group_missing %}
+                    Missing (set in environment)
+                    {% else %}
+                    Configured
+                    {% endif %}
+                </li>
+                <li>Active sites without Telegram group: {{ telegram_config_health.sites_missing_group|length }}</li>
+                <li>Active workers without site assignment: {{ telegram_config_health.workers_missing_site|length }}</li>
+                <li>Active workers on sites without group mapping: {{ telegram_config_health.workers_missing_group_mapping|length }}</li>
+            </ul>
+            {% if telegram_config_health.has_issues %}
+            <div class="helper">
+                Open <a href="{{ request.url_for('sites') }}"><b>Sites</b></a> and <a href="{{ request.url_for('workers') }}"><b>Workers</b></a>
+                to complete the missing mapping.
+            </div>
+            {% endif %}
+        </section>
     </aside>
 </section>
 
