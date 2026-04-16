@@ -244,13 +244,15 @@ async def _test_create_leave_request_rejects_annual_leave_without_notice_period(
             await session.refresh(worker)
 
             expected_notice_days = annual_leave_notice_days()
+            # today = 2026-04-08, notice = 3 days, so earliest allowed is 2026-04-11.
+            # Using 2026-04-10 (only 2 days ahead) must be rejected.
             with pytest.raises(LeaveError, match=rf"sekurang-kurangnya {expected_notice_days} hari"):
                 await create_leave_request(
                     session,
                     worker=worker,
                     leave_type="annual",
-                    start_date=date(2026, 4, 11),
-                    end_date=date(2026, 4, 11),
+                    start_date=date(2026, 4, 10),
+                    end_date=date(2026, 4, 10),
                     reason="Too soon annual leave",
                 )
     finally:

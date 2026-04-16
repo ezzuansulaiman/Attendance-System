@@ -23,13 +23,14 @@ from bot.keyboards import (
     worker_menu_keyboard,
     leave_type_keyboard,
 )
-from bot.messages import build_leave_confirmation_text, build_leave_summary_text, parse_user_date
+from bot.messages import build_leave_confirmation_text, build_leave_summary_text, format_display_date, parse_user_date
 from bot.notifications import send_leave_request_to_admins
 from bot.states import LeaveApplicationStates
 from models import session_scope
 from services.attendance_service import get_worker_by_telegram_id
 from services.leave_service import (
     LeaveError,
+    annual_leave_earliest_start_date,
     annual_leave_notice_met,
     annual_leave_notice_text,
     create_leave_request,
@@ -321,10 +322,15 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
     if current_state is None:
         await state.set_state(LeaveApplicationStates.leave_type)
     elif current_state not in {LeaveApplicationStates.leave_type.state, LeaveApplicationStates.start_date.state}:
-        # User is deeper in the flow — ask them to press Back first.
-        # Uses a soft toast (no show_alert) so it never blocks the UI.
-        await callback.answer("Untuk tukar jenis cuti, tekan butang Kembali dahulu.")
-        return
+        if _in_leave_flow(current_state):
+            # User is stuck deeper in the flow with a stale button from an older message.
+            # Restart the flow so they are not permanently locked out.
+            await state.clear()
+            await state.set_state(LeaveApplicationStates.leave_type)
+        else:
+            # Some unrelated flow is active (e.g. registration) — soft nudge only.
+            await callback.answer("Untuk tukar jenis cuti, tekan butang Kembali dahulu.")
+            return
 
     await callback.answer()
     leave_type = callback.data.split(":")[-1]
@@ -399,8 +405,11 @@ async def capture_start_date(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     if not annual_leave_notice_met(leave_type=data.get("leave_type", ""), start_date=start_date):
         _log_leave_block("annual_notice_failed", telegram_user_id=message.from_user.id, chat_type=message.chat.type)
+        earliest = annual_leave_earliest_start_date()
         await message.answer(
-            annual_leave_notice_text() + "\nSila masukkan semula tarikh mula yang memenuhi syarat notis."
+            annual_leave_notice_text()
+            + f"\nTarikh terawal yang dibenarkan ialah <b>{format_display_date(earliest)}</b>.\n"
+            "Sila masukkan semula tarikh mula."
         )
         return
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -140,6 +140,12 @@ def annual_leave_notice_met(*, leave_type: str, start_date: date, reference_date
         return True
     effective_reference_date = reference_date or _today_local_date()
     return (start_date - effective_reference_date).days >= notice_days
+
+
+def annual_leave_earliest_start_date(reference_date: Optional[date] = None) -> date:
+    """Return the earliest start date that satisfies the annual leave notice requirement."""
+    effective = reference_date or _today_local_date()
+    return effective + timedelta(days=annual_leave_notice_days())
 
 
 def _validate_annual_leave_notice(*, leave_type: str, start_date: date, reference_date: Optional[date] = None) -> None:
