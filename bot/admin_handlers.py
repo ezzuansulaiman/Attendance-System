@@ -298,6 +298,85 @@ async def show_pending_leaves(callback: CallbackQuery) -> None:
         )
 
 
+@router.message(Command("setgroup"))
+async def set_group_command(message: Message) -> None:
+    """Admin command to set telegram_group_id for a site. Usage: /setgroup <site_id> <group_id>"""
+    if not is_admin(message.from_user.id):
+        await message.answer("Arahan ini hanya untuk pentadbir.")
+        return
+    
+    args = message.text.split()
+    if len(args) != 3:
+        await message.answer(
+            "Penggunaan: /setgroup <site_id> <group_id>\n\n"
+            "Contoh: /setgroup 1 -100123456789\n\n"
+            "Untuk dapatkan group ID:\n"
+            "1. Tambah bot ke dalam group\n"
+            "2. Forward satu mesej dari group itu ke @userinfobot\n"
+            "3. Atau gunakan @RawDataBot untuk lihat ID group"
+        )
+        return
+    
+    try:
+        site_id = int(args[1])
+        group_id = int(args[2])
+    except ValueError:
+        await message.answer("Site ID dan Group ID mestilah nombor.")
+        return
+    
+    async with session_scope() as session:
+        from sqlalchemy import text, select
+        from models.models import Site
+        
+        # Check if site exists
+        result = await session.execute(select(Site).where(Site.id == site_id))
+        site = result.scalar_one_or_none()
+        
+        if not site:
+            await message.answer(f"Site dengan ID {site_id} tidak ditemui.")
+            return
+        
+        # Update the telegram_group_id
+        await session.execute(
+            text("UPDATE sites SET telegram_group_id = :group_id WHERE id = :site_id"),
+            {"group_id": group_id, "site_id": site_id}
+        )
+        await session.commit()
+    
+    await message.answer(
+        f"✅ Berjaya!\n\n"
+        f"Site: {site.name} (ID: {site_id})\n"
+        f"Telegram Group ID: {group_id}\n\n"
+        f"Sekarang pekerja boleh memohon cuti dalam group tersebut."
+    )
+
+
+@router.message(Command("sitelist"))
+async def list_sites_command(message: Message) -> None:
+    """Admin command to list all sites and their telegram_group_id"""
+    if not is_admin(message.from_user.id):
+        await message.answer("Arahan ini hanya untuk pentadbir.")
+        return
+    
+    async with session_scope() as session:
+        from sqlalchemy import text
+        
+        result = await session.execute(text("SELECT id, name, code, telegram_group_id FROM sites ORDER BY id"))
+        sites = result.fetchall()
+    
+    if not sites:
+        await message.answer("Tiada site dalam database.")
+        return
+    
+    text_response = "📋 **SENARAI SITE**\n\n"
+    for site in sites:
+        group_status = f"Group ID: `{site.telegram_group_id}`" if site.telegram_group_id else "❌ Group ID: Tidak ditetapkan"
+        text_response += f"• ID: {site.id}\n  Nama: {site.name}\n  Kod: {site.code or 'N/A'}\n  {group_status}\n\n"
+    
+    text_response += "\nGunakan /setgroup <site_id> <group_id> untuk set group ID."
+    await message.answer(text_response)
+
+
 @router.callback_query(F.data == "admin:report:custom")
 async def start_custom_report_flow(callback: CallbackQuery) -> None:
     await callback.answer()
