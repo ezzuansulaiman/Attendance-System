@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+<<<<<<< HEAD
+=======
 import logging
 
+>>>>>>> main
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.context import (
     inactive_worker_text,
-    leave_restriction_text,
     load_worker_access,
     registered_workers_only_text,
     worker_group_id,
-    worker_chat_is_allowed,
 )
 from bot.keyboards import (
     confirmation_keyboard,
@@ -46,6 +47,50 @@ LEAVE_BACK_CALLBACK = "leave:back"
 LEAVE_CANCEL_CALLBACK = "leave:cancel"
 
 
+<<<<<<< HEAD
+async def _submit_leave_request(message: Message, state: FSMContext, bot: Bot, *, telegram_user_id: int) -> None:
+    data = await state.get_data()
+    async with session_scope() as session:
+        worker = await get_worker_by_telegram_id(session, telegram_user_id, active_only=False)
+        if not worker:
+            await message.answer(registered_workers_only_text())
+            await state.clear()
+            return
+        if worker.is_active is False:
+            await message.answer(inactive_worker_text())
+            await state.clear()
+            return
+
+        try:
+            leave_request = await create_leave_request(
+                session,
+                worker=worker,
+                leave_type=data["leave_type"],
+                start_date=data["start_date"],
+                end_date=data["end_date"],
+                day_portion=data.get("day_portion"),
+                reason=data["reason"],
+                telegram_file_id=data.get("telegram_file_id"),
+            )
+        except LeaveError as exc:
+            await message.answer(str(exc))
+            await state.clear()
+            return
+
+    await message.answer(
+        build_leave_summary_text(
+            leave_request.id,
+            worker.full_name,
+            leave_request.leave_type,
+            leave_request.start_date,
+            leave_request.end_date,
+            leave_request.day_portion,
+            leave_request.reason,
+        )
+        + "\nStatus: DALAM SEMAKAN"
+    )
+    await send_leave_request_to_admins(bot, leave_request.id)
+=======
 def _log_leave_block(reason_code: str, *, telegram_user_id: int, chat_type: str) -> None:
     logger.info(
         "leave_apply_blocked reason=%s telegram_user_id=%s chat_type=%s",
@@ -76,6 +121,7 @@ def _in_leave_flow(state: str | None) -> bool:
 
 
 async def _cancel_leave_flow(message: Message, state: FSMContext) -> None:
+>>>>>>> main
     await state.clear()
     await message.answer(
         "Permohonan cuti dibatalkan. Anda boleh kembali ke menu pekerja.",
@@ -284,6 +330,17 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot)
         )
         await callback.message.answer(registered_workers_only_text())
         return
+<<<<<<< HEAD
+    
+    # Check if worker has a site assigned before allowing leave application
+    if not worker.site:
+        await callback.message.answer(
+            "Anda belum ditugaskan ke mana-mana site. Sila hubungi admin untuk menetapkan site anda sebelum memohon cuti."
+        )
+        return
+
+    # Allow leave application directly in the group (no chat restriction check needed for group-only workflow)
+=======
     if not worker_chat_is_allowed(worker, callback):
         _log_leave_block(
             "chat_not_allowed",
@@ -304,6 +361,7 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot)
         )
         return
 
+>>>>>>> main
     await state.clear()
     await state.set_state(LeaveApplicationStates.leave_type)
     await _show_leave_type_prompt(callback.message)
@@ -577,6 +635,16 @@ async def prompt_photo_again(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "leave:confirm")
 async def confirm_leave_request(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+<<<<<<< HEAD
+    if await state.get_state() != LeaveApplicationStates.confirmation.state:
+        await callback.answer(
+            "Permohonan ini sudah tidak aktif. Sila mulakan semula dari menu.",
+            show_alert=True,
+        )
+        return
+    await callback.answer()
+    await _submit_leave_request(callback.message, state, bot, telegram_user_id=callback.from_user.id)
+=======
     current_state = await state.get_state()
     if current_state != LeaveApplicationStates.confirmation.state:
         # Soft toast only — never a blocking popup.
@@ -593,6 +661,7 @@ async def confirm_leave_request(callback: CallbackQuery, state: FSMContext, bot:
 # ---------------------------------------------------------------------------
 # Navigation — back and cancel callbacks
 # ---------------------------------------------------------------------------
+>>>>>>> main
 
 
 @router.callback_query(F.data == LEAVE_BACK_CALLBACK)

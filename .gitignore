@@ -1,16 +1,10 @@
+```gitignore
+# Python cache files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
-.env
-.env.railway
-.env.local
-attendance.db
-attendance.db-shm
-attendance.db-wal
-*.sqlite
-*.sqlite3
-.DS_Store
-Thumbs.db
-.claude/worktrees/
+
+# Test cache
+.pytest_cache/
+```

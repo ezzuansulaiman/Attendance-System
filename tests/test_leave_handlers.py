@@ -66,8 +66,12 @@ def test_confirm_leave_request_uses_callback_user_id_for_submission(monkeypatch)
     assert captured["telegram_user_id"] == callback.from_user.id
 
 
+<<<<<<< HEAD
+def test_confirm_leave_request_shows_alert_when_state_mismatch(monkeypatch) -> None:
+=======
 def test_confirm_leave_request_shows_soft_toast_when_no_active_flow(monkeypatch) -> None:
     """When state is not the confirmation step, a soft toast (no blocking popup) is shown."""
+>>>>>>> main
     callback = DummyCallback()
     state = DummyState("some:other:state")
     dummy_bot = object()
@@ -75,6 +79,10 @@ def test_confirm_leave_request_shows_soft_toast_when_no_active_flow(monkeypatch)
     asyncio.run(confirm_leave_request(callback, state, dummy_bot))
 
     assert callback.answer_calls == 1
+<<<<<<< HEAD
+    assert callback.answer_kwargs[0]["show_alert"] is True
+    assert "tidak aktif" in callback.answer_kwargs[0]["text"]
+=======
     # Must NOT use show_alert=True — that creates a blocking popup which is the bug we fixed
     assert callback.answer_kwargs[0].get("show_alert") is not True
     assert callback.answer_kwargs[0]["text"] != ""
@@ -107,3 +115,4 @@ def test_classify_leave_error_reason_uses_expected_codes() -> None:
     assert _classify_leave_error_reason("Sudah ada permohonan cuti yang bertindih.") == "overlap_existing_leave"
     assert _classify_leave_error_reason("Gambar sokongan Telegram diperlukan.") == "missing_supporting_photo"
     assert _classify_leave_error_reason("Permohonan perlu dibuat sekurang-kurangnya 3 hari.") == "annual_notice_failed"
+>>>>>>> main
