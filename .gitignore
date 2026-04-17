@@ -1,10 +1,1 @@
-```gitignore
-# Python cache files
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Test cache
-.pytest_cache/
-```
+(bot/leave_handlers.py is a source code file, and there are no build artifacts, dependencies, or temporary files in the changes)
