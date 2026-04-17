@@ -258,6 +258,16 @@ async def init_database() -> None:
                         """
                     )
                 )
+            # Drop legacy columns that are no longer populated by the ORM.
+            # SQLite 3.35+ supports DROP COLUMN; older versions skip silently.
+            for _legacy_col in ("employee_id", "date_from", "date_to", "supporting_doc", "reviewer_notes"):
+                if _legacy_col in leave_names:
+                    try:
+                        await connection.execute(text(f'ALTER TABLE leave_requests DROP COLUMN "{_legacy_col}"'))
+                        leave_names.discard(_legacy_col)
+                    except Exception as _drop_exc:
+                        logger.debug("Cannot drop legacy column %s from SQLite leave_requests: %s", _legacy_col, _drop_exc)
+
             public_holiday_names = await _sqlite_column_names(connection, "public_holidays")
             for column_name, column_type in (
                 ("name", "VARCHAR(150)"),
@@ -427,6 +437,14 @@ async def init_database() -> None:
                         """
                     )
                 )
+            # Drop NOT NULL constraints from legacy columns that the ORM no longer populates.
+            # Without this, every INSERT into leave_requests raises IntegrityError.
+            for _legacy_col in ("employee_id", "date_from", "date_to", "supporting_doc", "reviewer_notes"):
+                if _legacy_col in pg_names:
+                    await connection.execute(
+                        text(f"ALTER TABLE leave_requests ALTER COLUMN {_legacy_col} DROP NOT NULL")
+                    )
+
         default_site_name = settings.default_site_name
         existing_site = await connection.execute(
             text("SELECT id FROM sites WHERE name = :name"),
