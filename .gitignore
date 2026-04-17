@@ -1,18 +1,10 @@
 ```
-# Python
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Database
-*.db
-
-# Dependencies
-.venv/
-venv/
-env/
-.env
-.env.local
-.env.*
+# Test cache
+.pytest_cache/
 ```
