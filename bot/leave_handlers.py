@@ -6,11 +6,9 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from bot.context import (
     inactive_worker_text,
-    leave_restriction_text,
     load_worker_access,
     registered_workers_only_text,
     worker_group_id,
-    worker_chat_is_allowed,
 )
 from bot.keyboards import (
     confirmation_keyboard,
@@ -214,21 +212,15 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot)
     if not worker:
         await callback.message.answer(registered_workers_only_text())
         return
-    if not worker_chat_is_allowed(worker, callback):
-        await callback.message.answer(leave_restriction_text())
-        return
-
-    if callback.message.chat.type in {"group", "supergroup"}:
-        bot_info = await bot.get_me()
-        deep_link_url = f"https://t.me/{bot_info.username}?start=leave"
+    
+    # Check if worker has a site assigned before allowing leave application
+    if not worker.site:
         await callback.message.answer(
-            "Sila mohon cuti melalui chat peribadi bot untuk memastikan privasi maklumat anda.",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Mohon Cuti Sekarang", url=deep_link_url)]]
-            ),
+            "Anda belum ditugaskan ke mana-mana site. Sila hubungi admin untuk menetapkan site anda sebelum memohon cuti."
         )
         return
 
+    # Allow leave application directly in the group (no chat restriction check needed for group-only workflow)
     await state.clear()
     await state.set_state(LeaveApplicationStates.leave_type)
     await _show_leave_type_prompt(callback.message)
