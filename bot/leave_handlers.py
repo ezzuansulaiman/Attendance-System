@@ -222,6 +222,7 @@ async def _show_leave_confirmation(message: Message, state: FSMContext, *, teleg
 
 
 async def _submit_leave_request(message: Message, state: FSMContext, bot: Bot, *, telegram_user_id: int) -> None:
+    # Phase 1: write to database — if this fails, nothing was committed and the user can retry.
     try:
         data = await state.get_data()
         async with session_scope() as session:
@@ -264,7 +265,19 @@ async def _submit_leave_request(message: Message, state: FSMContext, bot: Bot, *
                     ),
                 )
                 return
+    except Exception as exc:
+        logger.exception(
+            "DB error submitting leave request for user %s: %s: %s",
+            telegram_user_id, type(exc).__name__, exc,
+        )
+        await message.answer(
+            f"Ralat sistem semasa menghantar permohonan ({type(exc).__name__}). Sila cuba lagi atau hubungi admin."
+        )
+        return
 
+    # Phase 2: notify — best-effort; leave request is already committed above.
+    await state.clear()
+    try:
         await message.answer(
             build_leave_summary_text(
                 leave_request.id,
@@ -277,13 +290,13 @@ async def _submit_leave_request(message: Message, state: FSMContext, bot: Bot, *
             )
             + "\nStatus: DALAM SEMAKAN"
         )
-        await send_leave_request_to_admins(bot, leave_request.id)
-        await state.clear()
     except Exception:
-        logger.exception("Unexpected error submitting leave request for user %s", telegram_user_id)
-        await message.answer(
-            "Ralat tidak dijangka berlaku semasa menghantar permohonan. Sila cuba lagi atau hubungi admin."
-        )
+        logger.exception("Failed to send leave submission confirmation to user %s", telegram_user_id)
+
+    try:
+        await send_leave_request_to_admins(bot, leave_request.id)
+    except Exception:
+        logger.exception("Failed to send leave %s admin notifications", leave_request.id)
 
 
 async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
