@@ -41,7 +41,15 @@ def worker_group_id(worker: Optional[Worker]) -> Optional[int]:
 
 
 def worker_chat_is_allowed(worker: Optional[Worker], event: TelegramEvent) -> bool:
-    chat = event.message.chat if isinstance(event, CallbackQuery) else event.chat
+    # Extract chat from either CallbackQuery (via message) or Message directly
+    if isinstance(event, CallbackQuery):
+        # For callback queries, get chat from the associated message
+        if not event.message:
+            return False
+        chat = event.message.chat
+    else:
+        chat = event.chat
+    
     # Cuti mesti dipohon dalam group sahaja supaya semua pekerja boleh lihat
     if chat.type in {"group", "supergroup"}:
         allowed_group_id = worker_group_id(worker)
