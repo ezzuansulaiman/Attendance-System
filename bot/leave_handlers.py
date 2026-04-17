@@ -313,16 +313,15 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
     # When there is no active flow (stale button from a previous session), restart cleanly.
     if current_state is None:
         await state.set_state(LeaveApplicationStates.leave_type)
-    elif current_state not in {LeaveApplicationStates.leave_type.state, LeaveApplicationStates.start_date.state}:
-        if _in_leave_flow(current_state):
-            # User is stuck deeper in the flow with a stale button from an older message.
-            # Restart the flow so they are not permanently locked out.
-            await state.clear()
-            await state.set_state(LeaveApplicationStates.leave_type)
-        else:
-            # Some unrelated flow is active (e.g. registration) — soft nudge only.
-            await callback.answer("Untuk tukar jenis cuti, tekan butang Kembali dahulu.")
-            return
+    elif not _in_leave_flow(current_state):
+        # Some unrelated flow is active (e.g. registration) — soft nudge only.
+        await callback.answer("Untuk tukar jenis cuti, tekan butang Kembali dahulu.")
+        return
+
+    # If user is deeper in the flow and clicks a leave type button, restart the flow with new type
+    if current_state != LeaveApplicationStates.leave_type.state:
+        await state.clear()
+        await state.set_state(LeaveApplicationStates.leave_type)
 
     await callback.answer()
     leave_type = callback.data.split(":")[-1]
