@@ -4,6 +4,7 @@ import json
 from datetime import date
 from typing import Any, Optional
 
+from aiogram.fsm.state import State
 from aiogram.fsm.storage.base import BaseStorage, StateType, StorageKey
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -50,7 +51,12 @@ class DatabaseStorage(BaseStorage):
     async def set_state(self, key: StorageKey, state: StateType = None) -> None:
         async with self._session_factory() as session:
             row = await self._get_or_create_row(session, key)
-            row.state = str(state) if state is not None else None
+            if state is None:
+                row.state = None
+            elif isinstance(state, State):
+                row.state = state.state
+            else:
+                row.state = str(state)
             await session.commit()
 
     async def get_state(self, key: StorageKey) -> Optional[str]:
