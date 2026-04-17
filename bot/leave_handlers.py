@@ -222,62 +222,68 @@ async def _show_leave_confirmation(message: Message, state: FSMContext, *, teleg
 
 
 async def _submit_leave_request(message: Message, state: FSMContext, bot: Bot, *, telegram_user_id: int) -> None:
-    data = await state.get_data()
-    async with session_scope() as session:
-        worker = await get_worker_by_telegram_id(session, telegram_user_id, active_only=False)
-        if not worker:
-            _log_leave_block("worker_not_registered", telegram_user_id=telegram_user_id, chat_type=message.chat.type)
-            await message.answer(registered_workers_only_text())
-            await state.clear()
-            return
-        if worker.is_active is False:
-            _log_leave_block("worker_inactive", telegram_user_id=telegram_user_id, chat_type=message.chat.type)
-            await message.answer(inactive_worker_text())
-            await state.clear()
-            return
+    try:
+        data = await state.get_data()
+        async with session_scope() as session:
+            worker = await get_worker_by_telegram_id(session, telegram_user_id, active_only=False)
+            if not worker:
+                _log_leave_block("worker_not_registered", telegram_user_id=telegram_user_id, chat_type=message.chat.type)
+                await message.answer(registered_workers_only_text())
+                await state.clear()
+                return
+            if worker.is_active is False:
+                _log_leave_block("worker_inactive", telegram_user_id=telegram_user_id, chat_type=message.chat.type)
+                await message.answer(inactive_worker_text())
+                await state.clear()
+                return
 
-        try:
-            leave_request = await create_leave_request(
-                session,
-                worker=worker,
-                leave_type=data["leave_type"],
-                start_date=data["start_date"],
-                end_date=data["end_date"],
-                day_portion=data.get("day_portion"),
-                reason=data["reason"],
-                telegram_file_id=data.get("telegram_file_id"),
-            )
-        except LeaveError as exc:
-            _log_leave_block(
-                _classify_leave_error_reason(str(exc)),
-                telegram_user_id=telegram_user_id,
-                chat_type=message.chat.type,
-            )
-            # Keep state alive so the user can press Back to fix the issue instead of starting over
-            await message.answer(
-                str(exc) + "\n\nTekan <b>Kembali</b> untuk tukar maklumat atau <b>Batal</b> untuk keluar.",
-                reply_markup=confirmation_keyboard(
-                    confirm_callback="leave:confirm",
-                    back_callback=LEAVE_BACK_CALLBACK,
-                    cancel_callback=LEAVE_CANCEL_CALLBACK,
-                ),
-            )
-            return
+            try:
+                leave_request = await create_leave_request(
+                    session,
+                    worker=worker,
+                    leave_type=data["leave_type"],
+                    start_date=data["start_date"],
+                    end_date=data["end_date"],
+                    day_portion=data.get("day_portion"),
+                    reason=data["reason"],
+                    telegram_file_id=data.get("telegram_file_id"),
+                )
+            except LeaveError as exc:
+                _log_leave_block(
+                    _classify_leave_error_reason(str(exc)),
+                    telegram_user_id=telegram_user_id,
+                    chat_type=message.chat.type,
+                )
+                # Keep state alive so the user can press Back to fix the issue instead of starting over
+                await message.answer(
+                    str(exc) + "\n\nTekan <b>Kembali</b> untuk tukar maklumat atau <b>Batal</b> untuk keluar.",
+                    reply_markup=confirmation_keyboard(
+                        confirm_callback="leave:confirm",
+                        back_callback=LEAVE_BACK_CALLBACK,
+                        cancel_callback=LEAVE_CANCEL_CALLBACK,
+                    ),
+                )
+                return
 
-    await message.answer(
-        build_leave_summary_text(
-            leave_request.id,
-            worker.full_name,
-            leave_request.leave_type,
-            leave_request.start_date,
-            leave_request.end_date,
-            leave_request.day_portion,
-            leave_request.reason,
+        await message.answer(
+            build_leave_summary_text(
+                leave_request.id,
+                worker.full_name,
+                leave_request.leave_type,
+                leave_request.start_date,
+                leave_request.end_date,
+                leave_request.day_portion,
+                leave_request.reason,
+            )
+            + "\nStatus: DALAM SEMAKAN"
         )
-        + "\nStatus: DALAM SEMAKAN"
-    )
-    await send_leave_request_to_admins(bot, leave_request.id)
-    await state.clear()
+        await send_leave_request_to_admins(bot, leave_request.id)
+        await state.clear()
+    except Exception:
+        logger.exception("Unexpected error submitting leave request for user %s", telegram_user_id)
+        await message.answer(
+            "Ralat tidak dijangka berlaku semasa menghantar permohonan. Sila cuba lagi atau hubungi admin."
+        )
 
 
 async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
