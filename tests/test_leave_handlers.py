@@ -40,6 +40,10 @@ class DummyState:
     async def update_data(self, **kwargs) -> None:
         self.data.update(kwargs)
 
+    async def clear(self) -> None:
+        self.current_state = None
+        self.data = {}
+
 
 def test_confirm_leave_request_uses_callback_user_id_for_submission(monkeypatch) -> None:
     callback = DummyCallback()
@@ -129,51 +133,62 @@ def test_pick_leave_type_proceeds_without_rechecking_group_when_flow_active(monk
     callback.message.chat = SimpleNamespace(type="supergroup", id=-100999)
     state = DummyState(LeaveApplicationStates.leave_type.state)
 
-    group_check_called = []
-
     async def _fake_load_worker_access(_telegram_id: int):
         return SimpleNamespace(
             is_inactive=False,
             worker=SimpleNamespace(site=None),
         )
 
-    def _spy_worker_chat_is_allowed(_worker, _event):
-        group_check_called.append(True)
-        return False  # would block if re-checked
-
+    # Group check would return False — but it must NOT be called when flow is active.
     monkeypatch.setattr("bot.leave_handlers.load_worker_access", _fake_load_worker_access)
-    monkeypatch.setattr("bot.leave_handlers.worker_chat_is_allowed", _spy_worker_chat_is_allowed)
+    monkeypatch.setattr("bot.leave_handlers.worker_chat_is_allowed", lambda _worker, _event: False)
     monkeypatch.setattr("bot.leave_handlers.worker_group_id", lambda _worker: None)
 
     asyncio.run(pick_leave_type(callback, state))
 
-    # The group check should NOT have blocked the handler for an in-progress flow.
+    # State advanced despite group check returning False — group check was skipped.
     assert state.current_state == LeaveApplicationStates.start_date.state
     assert state.data["leave_type"] == "annual"
-    # worker_chat_is_allowed was not called at all (or was called but did NOT block)
-    # The state advanced — that's the key assertion.
 
 
-def test_pick_leave_type_stale_button_checks_group(monkeypatch) -> None:
-    """When current_state is None (stale button, no active flow), the group check IS applied."""
+def test_pick_leave_type_stale_or_foreign_state_restarts_flow_if_group_ok(monkeypatch) -> None:
+    """When the FSM state is None or a non-leave state (e.g. stuck registration), the handler
+    should restart the leave flow if the group check passes — not block with a toast."""
+    for stuck_state in (None, "RegistrationStates:full_name", "RegistrationStates:ic_number"):
+        callback = DummyCallback()
+        callback.data = "leave:type:annual"
+        callback.message.chat = SimpleNamespace(type="supergroup", id=-100999)
+        state = DummyState(stuck_state)
+
+        async def _fake_load_worker_access(_telegram_id: int):
+            return SimpleNamespace(is_inactive=False, worker=SimpleNamespace(site=None))
+
+        monkeypatch.setattr("bot.leave_handlers.load_worker_access", _fake_load_worker_access)
+        monkeypatch.setattr("bot.leave_handlers.worker_chat_is_allowed", lambda _w, _e: True)
+        monkeypatch.setattr("bot.leave_handlers.worker_group_id", lambda _w: None)
+
+        asyncio.run(pick_leave_type(callback, state))
+
+        assert state.current_state == LeaveApplicationStates.start_date.state, (
+            f"Expected start_date state but got {state.current_state!r} for stuck_state={stuck_state!r}"
+        )
+
+
+def test_pick_leave_type_stale_button_in_wrong_group_is_blocked(monkeypatch) -> None:
+    """When there is no active leave flow and the group check fails, the handler must block."""
     callback = DummyCallback()
     callback.data = "leave:type:annual"
     callback.message.chat = SimpleNamespace(type="supergroup", id=-100999)
-    state = DummyState(None)  # No active flow
+    state = DummyState(None)
 
     async def _fake_load_worker_access(_telegram_id: int):
-        return SimpleNamespace(
-            is_inactive=False,
-            worker=SimpleNamespace(site=None),
-        )
+        return SimpleNamespace(is_inactive=False, worker=SimpleNamespace(site=None))
 
     monkeypatch.setattr("bot.leave_handlers.load_worker_access", _fake_load_worker_access)
-    # Group check returns False — stale button from wrong chat.
-    monkeypatch.setattr("bot.leave_handlers.worker_chat_is_allowed", lambda _worker, _event: False)
+    monkeypatch.setattr("bot.leave_handlers.worker_chat_is_allowed", lambda _w, _e: False)
 
     asyncio.run(pick_leave_type(callback, state))
 
-    # State must NOT have advanced.
     assert state.current_state is None
     assert callback.answer_kwargs[0].get("show_alert") is True
 
