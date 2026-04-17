@@ -310,7 +310,6 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot)
 async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
     current_state = await state.get_state()
 
-    # Validate worker access first
     worker_access = await load_worker_access(callback.from_user.id)
     if worker_access.is_inactive:
         await callback.answer("Akaun anda tidak aktif.", show_alert=True)
@@ -319,12 +318,13 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
     if not worker:
         await callback.answer("Anda belum berdaftar sebagai pekerja.", show_alert=True)
         return
-    if not worker_chat_is_allowed(worker, callback):
-        await callback.answer("Permohonan cuti hanya boleh dibuat dalam kumpulan Telegram site anda.", show_alert=True)
-        return
 
     # When there is no active flow (stale button from a previous session), restart cleanly.
+    # Re-check group restriction here only for stale buttons (no active flow state).
     if current_state is None:
+        if not worker_chat_is_allowed(worker, callback):
+            await callback.answer("Permohonan cuti hanya boleh dibuat dalam kumpulan Telegram site anda.", show_alert=True)
+            return
         await state.set_state(LeaveApplicationStates.leave_type)
     elif not _in_leave_flow(current_state):
         # Some unrelated flow is active (e.g. registration) — soft nudge only.
@@ -450,20 +450,15 @@ async def capture_end_date(message: Message, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith("leave:portion:"))
 async def pick_leave_day_portion(callback: CallbackQuery, state: FSMContext) -> None:
     current_state = await state.get_state()
-    
-    # Validate worker access first
+
     worker_access = await load_worker_access(callback.from_user.id)
     if worker_access.is_inactive:
         await callback.answer("Akaun anda tidak aktif.", show_alert=True)
         return
-    worker = worker_access.worker
-    if not worker:
+    if not worker_access.worker:
         await callback.answer("Anda belum berdaftar sebagai pekerja.", show_alert=True)
         return
-    if not worker_chat_is_allowed(worker, callback):
-        await callback.answer("Permohonan cuti hanya boleh dibuat dalam kumpulan Telegram site anda.", show_alert=True)
-        return
-    
+
     if current_state != LeaveApplicationStates.day_portion.state:
         # Soft toast only — never block with show_alert so the user is not disrupted.
         if _in_leave_flow(current_state):
@@ -573,20 +568,15 @@ async def prompt_photo_again(message: Message, state: FSMContext) -> None:
 @router.callback_query(F.data == "leave:confirm")
 async def confirm_leave_request(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     current_state = await state.get_state()
-    
-    # Validate worker access first
+
     worker_access = await load_worker_access(callback.from_user.id)
     if worker_access.is_inactive:
         await callback.answer("Akaun anda tidak aktif.", show_alert=True)
         return
-    worker = worker_access.worker
-    if not worker:
+    if not worker_access.worker:
         await callback.answer("Anda belum berdaftar sebagai pekerja.", show_alert=True)
         return
-    if not worker_chat_is_allowed(worker, callback):
-        await callback.answer("Permohonan cuti hanya boleh dibuat dalam kumpulan Telegram site anda.", show_alert=True)
-        return
-    
+
     if current_state != LeaveApplicationStates.confirmation.state:
         # Soft toast only — never a blocking popup.
         if _in_leave_flow(current_state):
