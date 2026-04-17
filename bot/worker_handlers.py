@@ -16,7 +16,6 @@ from bot.context import (
     local_tz,
     registered_workers_only_text,
     worker_group_restriction_text,
-    worker_chat_is_allowed,
 )
 from bot.keyboards import (
     WORKER_MENU_BUTTON,
@@ -144,9 +143,7 @@ async def show_menu(message: Message, state: FSMContext) -> None:
         await message.answer(inactive_worker_text())
         return
     worker = worker_access.worker
-    if not worker_chat_is_allowed(worker, message) and not is_admin(message.from_user.id):
-        await message.answer(worker_group_restriction_text())
-        return
+    # Allow all workers to access menu in any group or private chat (group-only workflow)
     if not worker and not is_admin(message.from_user.id):
         await state.set_state(RegistrationStates.full_name)
         await message.answer(
@@ -177,9 +174,7 @@ async def show_worker_menu_from_text_button(message: Message, state: FSMContext)
     if not worker:
         await message.answer(registered_workers_only_text())
         return
-    if not worker_chat_is_allowed(worker, message):
-        await message.answer(worker_group_restriction_text())
-        return
+    # Allow all workers to access menu in any group or private chat (group-only workflow)
 
     await _send_navigation_menu(
         message,
@@ -200,9 +195,7 @@ async def handle_attendance_action(callback: CallbackQuery) -> None:
     if not worker:
         await callback.message.answer(registered_workers_only_text())
         return
-    if not worker_chat_is_allowed(worker, callback):
-        await callback.message.answer(attendance_restriction_text())
-        return
+    # Allow all workers to access attendance in any group or private chat (group-only workflow)
 
     async with session_scope() as session:
         try:
@@ -243,9 +236,7 @@ async def show_worker_status(callback: CallbackQuery) -> None:
     if not worker:
         await callback.message.answer(registered_workers_only_text())
         return
-    if not worker_chat_is_allowed(worker, callback):
-        await callback.message.answer(attendance_restriction_text())
-        return
+    # Allow all workers to access status in any group or private chat (group-only workflow)
 
     async with session_scope() as session:
         today = datetime.now(local_tz).date()
@@ -286,9 +277,7 @@ async def show_worker_profile(callback: CallbackQuery) -> None:
     if not worker:
         await callback.message.answer(registered_workers_only_text())
         return
-    if not worker_chat_is_allowed(worker, callback):
-        await callback.message.answer(worker_group_restriction_text())
-        return
+    # Allow all workers to access profile in any group or private chat (group-only workflow)
 
     await callback.message.answer(
         build_worker_profile_text(
@@ -313,9 +302,7 @@ async def show_worker_leave_history(callback: CallbackQuery) -> None:
     if not worker:
         await callback.message.answer(registered_workers_only_text())
         return
-    if not worker_chat_is_allowed(worker, callback):
-        await callback.message.answer(leave_restriction_text())
-        return
+    # Allow all workers to access leave history in any group or private chat (group-only workflow)
 
     async with session_scope() as session:
         leave_items = await list_leave_requests_for_worker(session, worker_id=worker.id, limit=5)
