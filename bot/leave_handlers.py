@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-<<<<<<< HEAD
-=======
 import logging
 
->>>>>>> main
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
