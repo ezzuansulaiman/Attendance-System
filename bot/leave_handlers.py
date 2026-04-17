@@ -4,7 +4,7 @@ import logging
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, Message
 
 from bot.context import (
     inactive_worker_text,
@@ -290,20 +290,12 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot)
             telegram_user_id=callback.from_user.id,
             chat_type=callback.message.chat.type,
         )
-        await callback.message.answer(leave_restriction_text())
-        return
-
-    if callback.message.chat.type in {"group", "supergroup"}:
-        bot_info = await bot.get_me()
-        deep_link_url = f"https://t.me/{bot_info.username}?start=leave"
         await callback.message.answer(
-            "Sila mohon cuti melalui chat peribadi bot untuk memastikan privasi maklumat anda.",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[[InlineKeyboardButton(text="Mohon Cuti Sekarang", url=deep_link_url)]]
-            ),
+            "Permohonan cuti hanya boleh dibuat dalam kumpulan Telegram site anda. Sila gunakan group ini untuk memohon cuti."
         )
         return
 
+    # Sekarang kita sudah dalam group yang dibenarkan, teruskan flow permohonan cuti
     await state.clear()
     await state.set_state(LeaveApplicationStates.leave_type)
     await _show_leave_type_prompt(callback.message)
