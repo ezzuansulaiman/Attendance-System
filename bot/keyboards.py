@@ -216,6 +216,70 @@ def leave_review_keyboard(leave_id: int) -> InlineKeyboardMarkup:
     )
 
 
+def leave_quick_start_date_keyboard(
+    *,
+    back_callback: str = BACK_CALLBACK,
+    cancel_callback: str = CANCEL_CALLBACK,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Semalam", callback_data="leave:startdate:yesterday"),
+                InlineKeyboardButton(text="Hari Ini", callback_data="leave:startdate:today"),
+                InlineKeyboardButton(text="Esok", callback_data="leave:startdate:tomorrow"),
+            ],
+            [
+                InlineKeyboardButton(text="Kembali", callback_data=back_callback),
+                InlineKeyboardButton(text="Batal", callback_data=cancel_callback),
+            ],
+        ]
+    )
+
+
+def leave_quick_end_date_keyboard(
+    *,
+    back_callback: str = BACK_CALLBACK,
+    cancel_callback: str = CANCEL_CALLBACK,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Sama Tarikh Mula", callback_data="leave:enddate:same")],
+            [
+                InlineKeyboardButton(text="Hari Ini", callback_data="leave:enddate:today"),
+                InlineKeyboardButton(text="Esok", callback_data="leave:enddate:tomorrow"),
+            ],
+            [
+                InlineKeyboardButton(text="Kembali", callback_data=back_callback),
+                InlineKeyboardButton(text="Batal", callback_data=cancel_callback),
+            ],
+        ]
+    )
+
+
+def leave_reason_keyboard(
+    *,
+    back_callback: str = BACK_CALLBACK,
+    cancel_callback: str = CANCEL_CALLBACK,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Sakit / Demam", callback_data="leave:reason:sakit"),
+                InlineKeyboardButton(text="Kemalangan", callback_data="leave:reason:kemalangan"),
+            ],
+            [
+                InlineKeyboardButton(text="Urusan peribadi", callback_data="leave:reason:urusan"),
+                InlineKeyboardButton(text="Kecemasan keluarga", callback_data="leave:reason:kecemasan"),
+            ],
+            [InlineKeyboardButton(text="Tulis sebab lain...", callback_data="leave:reason:other")],
+            [
+                InlineKeyboardButton(text="Kembali", callback_data=back_callback),
+                InlineKeyboardButton(text="Batal", callback_data=cancel_callback),
+            ],
+        ]
+    )
+
+
 def flow_control_keyboard(
     *,
     include_back: bool = True,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
@@ -10,6 +11,7 @@ from bot.context import (
     inactive_worker_text,
     leave_restriction_text,
     load_worker_access,
+    local_tz,
     registered_workers_only_text,
     worker_chat_is_allowed,
     worker_group_id,
@@ -20,8 +22,11 @@ from bot.keyboards import (
     is_back_alias,
     is_cancel_alias,
     leave_day_portion_keyboard,
-    worker_menu_keyboard,
+    leave_quick_end_date_keyboard,
+    leave_quick_start_date_keyboard,
+    leave_reason_keyboard,
     leave_type_keyboard,
+    worker_menu_keyboard,
 )
 from bot.messages import build_leave_confirmation_text, build_leave_summary_text, format_display_date, parse_user_date
 from bot.notifications import send_leave_request_to_admins
@@ -101,6 +106,77 @@ async def _show_leave_day_portion_prompt(target: Message) -> None:
 async def _prompt_for_reply(target: Message, label: str, placeholder: str = "") -> None:
     """Send a ForceReply message so users in groups with privacy mode ON can reply with text/photo."""
     await target.answer(label, reply_markup=ForceReply(selective=True, input_field_placeholder=placeholder))
+
+
+def _uses_quick_date_picker(leave_type: str) -> bool:
+    """MC and Emergency use inline date buttons; Annual uses free-text date entry."""
+    return leave_type in ("mc", "emergency")
+
+
+_QUICK_REASONS: dict[str, str] = {
+    "sakit": "Sakit / Demam",
+    "kemalangan": "Kemalangan",
+    "urusan": "Urusan peribadi",
+    "kecemasan": "Kecemasan keluarga",
+}
+
+
+async def _show_start_date_prompt(target: Message, *, leave_type: str, editing: bool = False) -> None:
+    if _uses_quick_date_picker(leave_type):
+        prompt = "Sila pilih tarikh mula:" if not editing else "Sila pilih semula tarikh mula:"
+        await target.answer(
+            prompt,
+            reply_markup=leave_quick_start_date_keyboard(
+                back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK
+            ),
+        )
+    else:
+        lines: list[str] = []
+        if leave_type == "annual" and not editing:
+            lines.append(annual_leave_notice_text())
+        lines.append(
+            "Sila hantar tarikh mula dalam format YYYY-MM-DD atau DD/MM/YYYY."
+            if not editing
+            else "Sila hantar semula tarikh mula dalam format YYYY-MM-DD atau DD/MM/YYYY."
+        )
+        await target.answer(
+            "\n".join(lines),
+            reply_markup=flow_control_keyboard(
+                back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK
+            ),
+        )
+        await _prompt_for_reply(target, "Tarikh mula:", "cth: 17/04/2026")
+
+
+async def _show_end_date_prompt(target: Message, *, leave_type: str, editing: bool = False) -> None:
+    if _uses_quick_date_picker(leave_type):
+        prompt = "Sila pilih tarikh akhir:" if not editing else "Sila pilih semula tarikh akhir:"
+        await target.answer(
+            prompt,
+            reply_markup=leave_quick_end_date_keyboard(
+                back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK
+            ),
+        )
+    else:
+        await target.answer(
+            "Sila hantar tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY."
+            if not editing
+            else "Sila hantar semula tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.",
+            reply_markup=flow_control_keyboard(
+                back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK
+            ),
+        )
+        await _prompt_for_reply(target, "Tarikh akhir:", "cth: 17/04/2026")
+
+
+async def _show_reason_prompt(target: Message, *, editing: bool = False) -> None:
+    prompt = "Sila pilih atau hantar sebab permohonan cuti:" if not editing else "Sila pilih atau hantar semula sebab cuti:"
+    await target.answer(
+        prompt,
+        reply_markup=leave_reason_keyboard(
+            back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK
+        ),
+    )
 
 
 def _group_not_configured_notice_text() -> str:
@@ -215,20 +291,12 @@ async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
 
     if current_state == LeaveApplicationStates.end_date.state:
         await state.set_state(LeaveApplicationStates.start_date)
-        await message.answer(
-            "Sila hantar semula tarikh mula dalam format YYYY-MM-DD atau DD/MM/YYYY.",
-            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
-        )
-        await _prompt_for_reply(message, "Tarikh mula:", "cth: 17/04/2026")
+        await _show_start_date_prompt(message, leave_type=data.get("leave_type", ""), editing=True)
         return
 
     if current_state == LeaveApplicationStates.day_portion.state:
         await state.set_state(LeaveApplicationStates.end_date)
-        await message.answer(
-            "Sila hantar semula tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.",
-            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
-        )
-        await _prompt_for_reply(message, "Tarikh akhir:", "cth: 17/04/2026")
+        await _show_end_date_prompt(message, leave_type=data.get("leave_type", ""), editing=True)
         return
 
     if current_state == LeaveApplicationStates.reason.state:
@@ -237,20 +305,12 @@ async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
             await _show_leave_day_portion_prompt(message)
             return
         await state.set_state(LeaveApplicationStates.end_date)
-        await message.answer(
-            "Sila hantar semula tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.",
-            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
-        )
-        await _prompt_for_reply(message, "Tarikh akhir:", "cth: 17/04/2026")
+        await _show_end_date_prompt(message, leave_type=data.get("leave_type", ""), editing=True)
         return
 
     if current_state == LeaveApplicationStates.photo.state:
         await state.set_state(LeaveApplicationStates.reason)
-        await message.answer(
-            "Sila hantar semula sebab ringkas bagi permohonan cuti ini.",
-            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
-        )
-        await _prompt_for_reply(message, "Sebab cuti:", "cth: Demam")
+        await _show_reason_prompt(message, editing=True)
         return
 
     if current_state == LeaveApplicationStates.confirmation.state:
@@ -263,11 +323,7 @@ async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
             await _prompt_for_reply(message, "Muat naik gambar sokongan di sini:", "lampirkan foto MC / surat doktor")
             return
         await state.set_state(LeaveApplicationStates.reason)
-        await message.answer(
-            "Sila hantar semula sebab ringkas bagi permohonan cuti ini.",
-            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
-        )
-        await _prompt_for_reply(message, "Sebab cuti:", "cth: Demam")
+        await _show_reason_prompt(message, editing=True)
         return
 
     await message.answer("Anda sudah berada di langkah pertama. Sila pilih jenis cuti atau tekan Batal.")
@@ -360,15 +416,8 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
 
     await state.update_data(leave_type=leave_type)
     await state.set_state(LeaveApplicationStates.start_date)
-    prompt_lines = [f"Jenis cuti dipilih: {leave_label(leave_type)}."]
-    if leave_type == "annual":
-        prompt_lines.append(annual_leave_notice_text())
-    prompt_lines.append("Sila hantar tarikh mula dalam format YYYY-MM-DD atau DD/MM/YYYY.")
-    await callback.message.answer(
-        "\n".join(prompt_lines),
-        reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
-    )
-    await _prompt_for_reply(callback.message, "Tarikh mula:", "cth: 17/04/2026")
+    await callback.message.answer(f"Jenis cuti dipilih: {leave_label(leave_type)}.")
+    await _show_start_date_prompt(callback.message, leave_type=leave_type)
 
 
 # ---------------------------------------------------------------------------
@@ -402,13 +451,26 @@ async def capture_start_date(message: Message, state: FSMContext) -> None:
         )
         return
 
+    data = await state.get_data()
     await state.update_data(start_date=start_date)
     await state.set_state(LeaveApplicationStates.end_date)
-    await message.answer(
-        "Baik, sekarang sila hantar tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.",
-        reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
-    )
-    await _prompt_for_reply(message, "Tarikh akhir:", "cth: 17/04/2026")
+    await _show_end_date_prompt(message, leave_type=data.get("leave_type", ""))
+
+
+@router.callback_query(LeaveApplicationStates.start_date, F.data.startswith("leave:startdate:"))
+async def pick_start_date_quick(callback: CallbackQuery, state: FSMContext) -> None:
+    offsets = {"today": 0, "tomorrow": 1, "yesterday": -1}
+    key = callback.data.split(":")[-1]
+    if key not in offsets:
+        await callback.answer()
+        return
+    await callback.answer()
+    start_date = datetime.now(local_tz).date() + timedelta(days=offsets[key])
+    data = await state.get_data()
+    await state.update_data(start_date=start_date)
+    await state.set_state(LeaveApplicationStates.end_date)
+    await callback.message.answer(f"Tarikh mula dipilih: {format_display_date(start_date)}.")
+    await _show_end_date_prompt(callback.message, leave_type=data.get("leave_type", ""))
 
 
 # ---------------------------------------------------------------------------
@@ -445,11 +507,41 @@ async def capture_end_date(message: Message, state: FSMContext) -> None:
 
     await state.update_data(day_portion="full")
     await state.set_state(LeaveApplicationStates.reason)
-    await message.answer(
-        "Sila hantar sebab ringkas bagi permohonan cuti ini.",
-        reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
-    )
-    await _prompt_for_reply(message, "Sebab cuti:", "cth: Demam")
+    await _show_reason_prompt(message)
+
+
+@router.callback_query(LeaveApplicationStates.end_date, F.data.startswith("leave:enddate:"))
+async def pick_end_date_quick(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    data = await state.get_data()
+    key = callback.data.split(":")[-1]
+    today = datetime.now(local_tz).date()
+
+    if key == "same":
+        end_date = data["start_date"]
+    elif key == "today":
+        end_date = today
+    elif key == "tomorrow":
+        end_date = today + timedelta(days=1)
+    else:
+        return
+
+    if end_date < data["start_date"]:
+        await callback.message.answer(
+            f"Tarikh akhir ({format_display_date(end_date)}) tidak boleh lebih awal daripada "
+            f"tarikh mula ({format_display_date(data['start_date'])})."
+        )
+        return
+
+    await state.update_data(end_date=end_date)
+    if end_date == data["start_date"]:
+        await state.set_state(LeaveApplicationStates.day_portion)
+        await _show_leave_day_portion_prompt(callback.message)
+        return
+
+    await state.update_data(day_portion="full")
+    await state.set_state(LeaveApplicationStates.reason)
+    await _show_reason_prompt(callback.message)
 
 
 # ---------------------------------------------------------------------------
@@ -485,11 +577,7 @@ async def pick_leave_day_portion(callback: CallbackQuery, state: FSMContext) -> 
 
     await state.update_data(day_portion=day_portion)
     await state.set_state(LeaveApplicationStates.reason)
-    await callback.message.answer(
-        "Sila hantar sebab ringkas bagi permohonan cuti ini.",
-        reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
-    )
-    await _prompt_for_reply(callback.message, "Sebab cuti:", "cth: Demam")
+    await _show_reason_prompt(callback.message)
 
 
 @router.message(LeaveApplicationStates.day_portion)
@@ -506,6 +594,43 @@ async def prompt_leave_day_portion_again(message: Message, state: FSMContext) ->
 # ---------------------------------------------------------------------------
 # Step 5 — reason
 # ---------------------------------------------------------------------------
+
+
+@router.callback_query(LeaveApplicationStates.reason, F.data.startswith("leave:reason:"))
+async def pick_reason_quick(callback: CallbackQuery, state: FSMContext) -> None:
+    key = callback.data.split(":")[-1]
+    if key == "other":
+        await callback.answer()
+        await _prompt_for_reply(callback.message, "Tulis sebab cuti anda:", "cth: Demam, Kemalangan...")
+        return
+
+    reason = _QUICK_REASONS.get(key)
+    if not reason:
+        await callback.answer()
+        return
+
+    await callback.answer()
+    await state.update_data(reason=reason)
+    data = await state.get_data()
+    if leave_requires_photo(data["leave_type"]):
+        await state.set_state(LeaveApplicationStates.photo)
+        photo_prompt = (
+            "Sila muat naik gambar sokongan sekarang. "
+            "Bukti ini akan dihantar ke group site bersama alasan."
+        )
+        if data.get("group_delivery_unavailable"):
+            photo_prompt = (
+                "Sila muat naik gambar sokongan sekarang. "
+                "Bukti ini akan dihantar kepada admin dahulu kerana group site belum dikonfigurasi."
+            )
+        await callback.message.answer(
+            photo_prompt,
+            reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
+        )
+        await _prompt_for_reply(callback.message, "Muat naik gambar sokongan di sini:", "lampirkan foto MC / surat doktor")
+        return
+
+    await _show_leave_confirmation(callback.message, state, telegram_user_id=callback.from_user.id)
 
 
 @router.message(LeaveApplicationStates.reason)
