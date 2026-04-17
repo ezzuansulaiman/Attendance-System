@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
+from aiogram.types import ForceReply
+
 from bot.leave_handlers import _classify_leave_error_reason, confirm_leave_request, pick_leave_type
 from bot.states import LeaveApplicationStates
 
@@ -9,9 +11,11 @@ class DummyMessage:
     def __init__(self) -> None:
         self.from_user = SimpleNamespace(id=999999)
         self.answers: list[str] = []
+        self.answer_markups: list = []
 
     async def answer(self, text: str, **kwargs) -> None:
         self.answers.append(text)
+        self.answer_markups.append(kwargs.get("reply_markup"))
 
 
 class DummyCallback:
@@ -197,3 +201,29 @@ def test_classify_leave_error_reason_uses_expected_codes() -> None:
     assert _classify_leave_error_reason("Sudah ada permohonan cuti yang bertindih.") == "overlap_existing_leave"
     assert _classify_leave_error_reason("Gambar sokongan Telegram diperlukan.") == "missing_supporting_photo"
     assert _classify_leave_error_reason("Permohonan perlu dibuat sekurang-kurangnya 3 hari.") == "annual_notice_failed"
+
+
+def test_pick_leave_type_sends_force_reply_for_date_input(monkeypatch) -> None:
+    """After picking a leave type, the bot must send a ForceReply message so the user's
+    reply is delivered by Telegram even when bot privacy mode is enabled in the group."""
+    callback = DummyCallback()
+    callback.data = "leave:type:annual"
+    callback.message.chat = SimpleNamespace(type="supergroup", id=-100999)
+    state = DummyState(LeaveApplicationStates.leave_type.state)
+
+    async def _fake_load_worker_access(_telegram_id: int):
+        return SimpleNamespace(
+            is_inactive=False,
+            worker=SimpleNamespace(site=None),
+        )
+
+    monkeypatch.setattr("bot.leave_handlers.load_worker_access", _fake_load_worker_access)
+    monkeypatch.setattr("bot.leave_handlers.worker_chat_is_allowed", lambda _w, _e: True)
+    monkeypatch.setattr("bot.leave_handlers.worker_group_id", lambda _w: None)
+
+    asyncio.run(pick_leave_type(callback, state))
+
+    assert state.current_state == LeaveApplicationStates.start_date.state
+    # The last message sent must use ForceReply so privacy-mode groups forward the reply.
+    force_reply_markups = [m for m in callback.message.answer_markups if isinstance(m, ForceReply)]
+    assert force_reply_markups, "Expected at least one ForceReply markup in the sent messages"
