@@ -83,3 +83,25 @@ def test_send_leave_request_to_admins_uses_fallback_group_for_emergency_leave(mo
     assert any(item["chat_id"] == -100444555 for item in bot.photos)
     group_photo = next(item for item in bot.photos if item["chat_id"] == -100444555)
     assert "Family emergency" in group_photo["caption"]
+
+
+def test_send_leave_request_to_admins_adds_warning_when_group_not_configured(monkeypatch) -> None:
+    bot = DummyBot()
+    leave_request = _make_leave_request(leave_type="mc", site_group_id=None)
+
+    @asynccontextmanager
+    async def _fake_session_scope():
+        yield object()
+
+    async def _fake_get_leave_request(*args, **kwargs):
+        return leave_request
+
+    monkeypatch.setattr("bot.notifications.get_settings", lambda: SimpleNamespace(admin_ids=(101,), group_id=None))
+    monkeypatch.setattr("bot.notifications.session_scope", _fake_session_scope)
+    monkeypatch.setattr("bot.notifications.get_leave_request", _fake_get_leave_request)
+
+    asyncio.run(send_leave_request_to_admins(bot, leave_request.id))
+
+    admin_photo = next(item for item in bot.photos if item["chat_id"] == 101)
+    assert "group Telegram site belum dikonfigurasi" in admin_photo["caption"]
+    assert len([item for item in bot.photos if item["chat_id"] != 101]) == 0

@@ -67,6 +67,12 @@ async def send_leave_request_to_admins(bot: Bot, leave_request_id: int) -> None:
             leave_request.day_portion,
             leave_request.reason,
         )
+        group_chat_id = _leave_group_chat_id(leave_request, settings.group_id)
+        if leave_requires_photo(leave_request.leave_type) and group_chat_id is None:
+            text += (
+                "\n\n<i>Perhatian admin: group Telegram site belum dikonfigurasi, "
+                "jadi bukti sokongan tidak dapat dihantar ke group site.</i>"
+            )
 
         for admin_id in settings.admin_ids:
             try:

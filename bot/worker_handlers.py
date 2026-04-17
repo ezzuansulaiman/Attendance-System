@@ -364,6 +364,12 @@ async def capture_registration_ic(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "registration:confirm")
 async def confirm_registration(callback: CallbackQuery, state: FSMContext) -> None:
+    if await state.get_state() != RegistrationStates.confirmation.state:
+        await callback.answer(
+            "Pendaftaran sudah tidak aktif. Sila mulakan semula.",
+            show_alert=True,
+        )
+        return
     await callback.answer()
     data = await state.get_data()
     async with session_scope() as session:
@@ -393,12 +399,20 @@ async def confirm_registration(callback: CallbackQuery, state: FSMContext) -> No
 
 @router.callback_query(F.data == REGISTRATION_BACK_CALLBACK)
 async def handle_registration_back_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current is None or not current.startswith("RegistrationStates:"):
+        await callback.answer("Pendaftaran sudah tidak aktif.", show_alert=True)
+        return
     await callback.answer()
     await _step_back_in_registration_flow(callback.message, state)
 
 
 @router.callback_query(F.data == REGISTRATION_CANCEL_CALLBACK)
 async def handle_registration_cancel_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    if current is None or not current.startswith("RegistrationStates:"):
+        await callback.answer("Tiada pendaftaran aktif untuk dibatalkan.", show_alert=True)
+        return
     await callback.answer()
     await _cancel_registration_flow(callback.message, state)
 

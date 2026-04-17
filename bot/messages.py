@@ -397,9 +397,14 @@ def build_worker_leave_history_text(entries: list[dict[str, str]]) -> str:
 
 def parse_user_date(raw_value: str) -> date:
     cleaned = (raw_value or "").strip()
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
         try:
             return datetime.strptime(cleaned, fmt).date()
         except ValueError:
             continue
-    raise ValueError("Sila gunakan format tarikh YYYY-MM-DD atau DD/MM/YYYY.")
+    raise ValueError(
+        "Format tarikh tidak dikenali. Sila gunakan salah satu format berikut:\n"
+        "• <code>2026-05-20</code> (YYYY-MM-DD)\n"
+        "• <code>20/05/2026</code> (DD/MM/YYYY)\n"
+        "• <code>20-05-2026</code> (DD-MM-YYYY)"
+    )

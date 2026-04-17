@@ -54,10 +54,18 @@ def test_dashboard_template_renders_primary_actions() -> None:
         leave_requests=[leave],
         sites=[site],
         selected_site_id=1,
+        telegram_config_health={
+            "has_issues": True,
+            "fallback_group_missing": True,
+            "sites_missing_group": [site],
+            "workers_missing_site": [],
+            "workers_missing_group_mapping": [],
+        },
     )
 
     assert "Manage Attendance" in html
     assert "Current Excel" in html
+    assert "Telegram Config Health" in html
     assert "/leaves/1/approve" in html
     assert 'target="_blank"' not in html
     assert ' download' not in html

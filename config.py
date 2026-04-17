@@ -172,7 +172,7 @@ def get_settings() -> Settings:
         session_secret=_get_env("SESSION_SECRET", "change-me-please") or "change-me-please",
         company_name=_get_env("COMPANY_NAME", "Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.") or "Khidmat Hartanah Samat Ayob & Rakan Sdn Bhd.",
         default_site_name=_get_env("DEFAULT_SITE_NAME", "Sepang") or "Sepang",
-        annual_leave_notice_days=_get_env_int("ANNUAL_LEAVE_NOTICE_DAYS", 5),
+        annual_leave_notice_days=_get_env_int("ANNUAL_LEAVE_NOTICE_DAYS", 3),
         attendance_reminders_enabled=_get_env_bool("ATTENDANCE_REMINDERS_ENABLED", True),
         attendance_checkin_reminder_time=_parse_clock_time("ATTENDANCE_CHECKIN_REMINDER_TIME", "08:00"),
         attendance_checkout_reminder_time=_parse_clock_time("ATTENDANCE_CHECKOUT_REMINDER_TIME", "17:00"),

@@ -69,7 +69,10 @@ def attendance_restriction_text() -> str:
 
 
 def leave_restriction_text() -> str:
-    return "Permohonan cuti hanya boleh dibuat dalam kumpulan pekerja yang ditetapkan atau melalui chat peribadi."
+    return (
+        "Permohonan cuti hanya boleh dibuat dalam kumpulan pekerja yang ditetapkan atau melalui chat peribadi. "
+        "Jika anda berada dalam group lain, buka chat peribadi bot dan tekan Mohon Cuti semula."
+    )
 
 
 def registered_workers_only_text() -> str:
