@@ -457,8 +457,16 @@ async def capture_start_date(message: Message, state: FSMContext) -> None:
     await _show_end_date_prompt(message, leave_type=data.get("leave_type", ""))
 
 
-@router.callback_query(LeaveApplicationStates.start_date, F.data.startswith("leave:startdate:"))
+@router.callback_query(F.data.startswith("leave:startdate:"))
 async def pick_start_date_quick(callback: CallbackQuery, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    if current_state != LeaveApplicationStates.start_date.state:
+        if _in_leave_flow(current_state):
+            await callback.answer("Sila ikuti langkah semasa atau tekan Kembali untuk ubah pilihan.")
+        else:
+            await callback.answer("Tiada permohonan aktif. Sila tekan 'Mohon Cuti' untuk mula.")
+        return
+
     offsets = {"today": 0, "tomorrow": 1, "yesterday": -1}
     key = callback.data.split(":")[-1]
     if key not in offsets:
@@ -510,8 +518,16 @@ async def capture_end_date(message: Message, state: FSMContext) -> None:
     await _show_reason_prompt(message)
 
 
-@router.callback_query(LeaveApplicationStates.end_date, F.data.startswith("leave:enddate:"))
+@router.callback_query(F.data.startswith("leave:enddate:"))
 async def pick_end_date_quick(callback: CallbackQuery, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    if current_state != LeaveApplicationStates.end_date.state:
+        if _in_leave_flow(current_state):
+            await callback.answer("Sila ikuti langkah semasa atau tekan Kembali untuk ubah pilihan.")
+        else:
+            await callback.answer("Tiada permohonan aktif. Sila tekan 'Mohon Cuti' untuk mula.")
+        return
+
     await callback.answer()
     data = await state.get_data()
     key = callback.data.split(":")[-1]
@@ -596,8 +612,16 @@ async def prompt_leave_day_portion_again(message: Message, state: FSMContext) ->
 # ---------------------------------------------------------------------------
 
 
-@router.callback_query(LeaveApplicationStates.reason, F.data.startswith("leave:reason:"))
+@router.callback_query(F.data.startswith("leave:reason:"))
 async def pick_reason_quick(callback: CallbackQuery, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    if current_state != LeaveApplicationStates.reason.state:
+        if _in_leave_flow(current_state):
+            await callback.answer("Sila ikuti langkah semasa atau tekan Kembali untuk ubah pilihan.")
+        else:
+            await callback.answer("Tiada permohonan aktif. Sila tekan 'Mohon Cuti' untuk mula.")
+        return
+
     key = callback.data.split(":")[-1]
     if key == "other":
         await callback.answer()
