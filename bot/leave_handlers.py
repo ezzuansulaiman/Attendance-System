@@ -319,20 +319,16 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer("Anda belum berdaftar sebagai pekerja.", show_alert=True)
         return
 
-    # When there is no active flow (stale button from a previous session), restart cleanly.
-    # Re-check group restriction here only for stale buttons (no active flow state).
-    if current_state is None:
+    # If there is no active leave flow (state is None or some other flow like registration),
+    # re-check the group restriction before restarting cleanly.
+    if not _in_leave_flow(current_state):
         if not worker_chat_is_allowed(worker, callback):
             await callback.answer("Permohonan cuti hanya boleh dibuat dalam kumpulan Telegram site anda.", show_alert=True)
             return
+        await state.clear()
         await state.set_state(LeaveApplicationStates.leave_type)
-    elif not _in_leave_flow(current_state):
-        # Some unrelated flow is active (e.g. registration) — soft nudge only.
-        await callback.answer("Untuk tukar jenis cuti, tekan butang Kembali dahulu.")
-        return
-
-    # If user is deeper in the flow and clicks a leave type button, restart the flow with new type
-    if current_state != LeaveApplicationStates.leave_type.state:
+    elif current_state != LeaveApplicationStates.leave_type.state:
+        # User is deeper in the leave flow and clicked a type button — restart with new type.
         await state.clear()
         await state.set_state(LeaveApplicationStates.leave_type)
 
