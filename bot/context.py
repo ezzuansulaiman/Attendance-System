@@ -42,11 +42,11 @@ def worker_group_id(worker: Optional[Worker]) -> Optional[int]:
 
 def worker_chat_is_allowed(worker: Optional[Worker], event: TelegramEvent) -> bool:
     chat = event.message.chat if isinstance(event, CallbackQuery) else event.chat
-    if chat.type == "private":
-        return True
+    # Cuti mesti dipohon dalam group sahaja supaya semua pekerja boleh lihat
     if chat.type in {"group", "supergroup"}:
         allowed_group_id = worker_group_id(worker)
         return allowed_group_id is not None and chat.id == allowed_group_id
+    # Tidak benarkan permohonan cuti dari private chat
     return False
 
 
@@ -70,8 +70,8 @@ def attendance_restriction_text() -> str:
 
 def leave_restriction_text() -> str:
     return (
-        "Permohonan cuti hanya boleh dibuat dalam kumpulan pekerja yang ditetapkan atau melalui chat peribadi. "
-        "Jika anda berada dalam group lain, buka chat peribadi bot dan tekan Mohon Cuti semula."
+        "Permohonan cuti hanya boleh dibuat dalam kumpulan Telegram site anda. "
+        "Sila pastikan bot telah ditambah ke dalam group site dan ID group telah dikonfigurasi."
     )
 
 
