@@ -63,7 +63,7 @@ async def _send_navigation_menu(message: Message, *, show_worker_menu: bool, sho
     )
     if reply_markup:
         await message.answer(
-            "Butang menu sudah dipaparkan di bawah. Pilih menu yang anda perlukan tanpa menaip command slash.",
+            "Menu dah keluar kat bawah tu. Tekan mana yang anda perlukan.",
             reply_markup=reply_markup,
         )
 
@@ -87,7 +87,7 @@ async def _show_registration_confirmation(message: Message, state: FSMContext) -
 
 async def _cancel_registration_flow(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("Pendaftaran dibatalkan. Taip <code>menu</code> bila anda mahu mula semula.")
+    await message.answer("Ok, pendaftaran dibatalkan. Taip <code>menu</code> bila nak cuba semula.")
 
 
 async def _step_back_in_registration_flow(message: Message, state: FSMContext) -> None:
@@ -95,21 +95,21 @@ async def _step_back_in_registration_flow(message: Message, state: FSMContext) -
     if current_state == RegistrationStates.ic_number.state:
         await state.set_state(RegistrationStates.full_name)
         await message.answer(
-            "Baik, sila hantar semula <b>NAMA PENUH</b> anda.",
+            "Ok, hantar balik <b>nama penuh</b> anda.",
             reply_markup=flow_control_keyboard(include_back=False, cancel_callback=REGISTRATION_CANCEL_CALLBACK),
         )
         return
     if current_state == RegistrationStates.confirmation.state:
         await state.set_state(RegistrationStates.ic_number)
         await message.answer(
-            "Sila hantar semula <b>NO. IC</b> anda.",
+            "Hantar balik <b>no. IC</b> anda.",
             reply_markup=flow_control_keyboard(
                 back_callback=REGISTRATION_BACK_CALLBACK,
                 cancel_callback=REGISTRATION_CANCEL_CALLBACK,
             ),
         )
         return
-    await message.answer("Anda sudah berada di langkah pertama pendaftaran.")
+    await message.answer("Dah kat langkah pertama dah.")
 
 
 @router.message(CommandStart(deep_link=True))
@@ -333,13 +333,13 @@ async def capture_registration_name(message: Message, state: FSMContext) -> None
 
     full_name = (message.text or "").strip()
     if not full_name:
-        await message.answer("Sila hantar <b>NAMA PENUH</b> anda.")
+        await message.answer("Hantar <b>nama penuh</b> anda.")
         return
 
     await state.update_data(full_name=full_name)
     await state.set_state(RegistrationStates.ic_number)
     await message.answer(
-        "Baik, sekarang sila hantar <b>NO. IC</b> anda.",
+        "Ok, sekarang hantar <b>no. IC</b> anda.",
         reply_markup=flow_control_keyboard(
             back_callback=REGISTRATION_BACK_CALLBACK,
             cancel_callback=REGISTRATION_CANCEL_CALLBACK,
@@ -358,7 +358,7 @@ async def capture_registration_ic(message: Message, state: FSMContext) -> None:
 
     ic_number = (message.text or "").strip()
     if not ic_number:
-        await message.answer("Sila hantar <b>NO. IC</b> anda.")
+        await message.answer("Hantar <b>no. IC</b> anda.")
         return
 
     await state.update_data(ic_number=ic_number)
@@ -369,7 +369,7 @@ async def capture_registration_ic(message: Message, state: FSMContext) -> None:
 async def confirm_registration(callback: CallbackQuery, state: FSMContext) -> None:
     if await state.get_state() != RegistrationStates.confirmation.state:
         await callback.answer(
-            "Pendaftaran sudah tidak aktif. Sila mulakan semula.",
+            "Pendaftaran dah tamat. Mula semula.",
             show_alert=True,
         )
         return
@@ -394,8 +394,8 @@ async def confirm_registration(callback: CallbackQuery, state: FSMContext) -> No
         show_admin_menu=is_admin(callback.from_user.id),
     )
     await callback.message.answer(
-        f"Pendaftaran untuk {worker.full_name} telah berjaya.\n"
-        "Anda kini boleh menggunakan menu kehadiran.",
+        f"Pendaftaran berjaya! Selamat datang, {worker.full_name}.\n"
+        "Boleh mula guna sistem kehadiran sekarang.",
         reply_markup=worker_menu_keyboard(),
     )
 
@@ -404,7 +404,7 @@ async def confirm_registration(callback: CallbackQuery, state: FSMContext) -> No
 async def handle_registration_back_callback(callback: CallbackQuery, state: FSMContext) -> None:
     current = await state.get_state()
     if current is None or not current.startswith("RegistrationStates:"):
-        await callback.answer("Pendaftaran sudah tidak aktif.", show_alert=True)
+        await callback.answer("Pendaftaran dah tamat.", show_alert=True)
         return
     await callback.answer()
     await _step_back_in_registration_flow(callback.message, state)
@@ -414,7 +414,7 @@ async def handle_registration_back_callback(callback: CallbackQuery, state: FSMC
 async def handle_registration_cancel_callback(callback: CallbackQuery, state: FSMContext) -> None:
     current = await state.get_state()
     if current is None or not current.startswith("RegistrationStates:"):
-        await callback.answer("Tiada pendaftaran aktif untuk dibatalkan.", show_alert=True)
+        await callback.answer("Takde pendaftaran aktif sekarang.", show_alert=True)
         return
     await callback.answer()
     await _cancel_registration_flow(callback.message, state)

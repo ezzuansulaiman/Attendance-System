@@ -35,10 +35,10 @@ def mask_sensitive_value(value: Optional[str], *, visible_suffix: int = 4) -> st
 def worker_menu_text() -> str:
     return (
         "<b>Menu Kehadiran</b>\n"
-        "Sila gunakan butang menu yang dipaparkan. Anda tidak perlu menaip <code>/menu</code>. Jika butang tidak muncul, taip <code>menu</code> sahaja.\n\n"
-        "Pekerja yang berdaftar boleh merekod masuk, merekod keluar, semak status hari ini, melihat cuti sendiri, dan memohon cuti.\n"
+        "Guna butang menu kat bawah tu. Kalau butang tak keluar, taip je <code>menu</code>.\n\n"
+        "Boleh rekod masuk/keluar, semak status hari ini, tengok sejarah cuti, dan mohon cuti.\n"
         f"{annual_leave_notice_text()}\n"
-        "Untuk Cuti Sakit dan Cuti Kecemasan, anda akan diminta muat naik gambar sokongan. Bukti sokongan dan alasan akan dihantar ke group site untuk makluman."
+        "Untuk Cuti Sakit dan Cuti Kecemasan, kena lampirkan gambar sokongan. Bukti dan alasan akan dihantar ke group site."
     )
 
 
@@ -102,22 +102,22 @@ def build_attendance_reminder_text(reminder_type: str, *, pending_names: Optiona
 def registration_intro_text() -> str:
     return (
         "<b>Pendaftaran Kali Pertama</b>\n"
-        "Sebelum menggunakan sistem kehadiran, sila daftar terlebih dahulu.\n\n"
-        "Sila hantar <b>NAMA PENUH</b> anda.\n"
-        "Jika anda mahu berhenti, tekan <b>Batal</b> atau taip <code>batal</code>."
+        "Nampaknya anda belum berdaftar lagi. Jom daftar sekejap.\n\n"
+        "Hantar <b>NAMA PENUH</b> anda.\n"
+        "Nak batal? Tekan <b>Batal</b> atau taip <code>batal</code>."
     )
 
 
 def admin_menu_text(*, web_login_enabled: bool) -> str:
     web_line = (
-        "\nGunakan <b>Buka Admin Web</b> untuk membuka halaman login dashboard di browser."
+        "\nGuna <b>Buka Admin Web</b> untuk buka halaman login dashboard."
         if web_login_enabled
-        else "\nTetapkan <code>WEB_BASE_URL</code> jika anda mahu pautan dashboard dipaparkan di sini."
+        else "\nTetapkan <code>WEB_BASE_URL</code> kalau nak pautan dashboard dipaparkan di sini."
     )
     return (
         "<b>Menu Admin</b>\n"
-        "Sila gunakan butang menu yang dipaparkan. Anda tidak perlu menaip <code>/admin</code>. Jika butang tidak muncul, taip <code>admin</code> sahaja."
-        "\nAnda boleh semak cuti menunggu, lihat ringkasan Telegram, jana laporan ikut site dan bulan, atau muat turun laporan PDF dan Excel terus dari sini."
+        "Guna butang menu kat bawah. Kalau tak keluar, taip je <code>admin</code>."
+        "\nBoleh semak cuti menunggu, tengok ringkasan Telegram, jana laporan ikut site dan bulan, atau muat turun laporan PDF dan Excel dari sini."
         f"{web_line}"
     )
 
@@ -125,16 +125,16 @@ def admin_menu_text(*, web_login_enabled: bool) -> str:
 def build_admin_report_site_picker_text() -> str:
     return (
         "<b>Laporan Ikut Site/Bulan</b>\n"
-        "Pilih site yang anda mahu gunakan untuk laporan Telegram ini."
+        "Pilih site mana nak jana laporan."
     )
 
 
 def build_admin_report_month_picker_text(*, site_name: str, year: int) -> str:
     return (
-        "<b>Pilih Bulan Laporan</b>\n"
+        "<b>Pilih Bulan</b>\n"
         f"Site: {html.escape(site_name)}\n"
         f"Tahun: {year}\n"
-        "Tekan bulan yang anda mahu jana."
+        "Tekan bulan yang nak dijana."
     )
 
 
@@ -273,7 +273,7 @@ def build_leave_confirmation_text(
         f"Tempoh: {format_leave_duration(start_date=start_date, end_date=end_date, day_portion=day_portion)}\n"
         f"Sebab: {reason}\n"
         f"Dokumen Sokongan: {document_line}\n\n"
-        f"Tekan <b>Sahkan</b> untuk menghantar permohonan."
+        f"Semak dulu, lepas tu tekan <b>Sahkan</b> kalau dah ok."
         f"{group_notice}"
     )
 
@@ -388,7 +388,7 @@ def build_worker_profile_text(
 
 def build_worker_leave_history_text(entries: list[dict[str, str]]) -> str:
     if not entries:
-        return "<b>Cuti Saya</b>\nBelum ada rekod cuti."
+        return "<b>Cuti Saya</b>\nTiada rekod cuti lagi."
     lines = ["<b>Cuti Saya</b>"]
     for entry in entries:
         lines.append(

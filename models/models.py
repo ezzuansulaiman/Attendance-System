@@ -18,6 +18,7 @@ class Worker(Base):
     full_name: Mapped[str] = mapped_column(String(150))
     ic_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, index=True)
     employee_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    position: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     site_id: Mapped[Optional[int]] = mapped_column(ForeignKey("sites.id", ondelete="SET NULL"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

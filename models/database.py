@@ -159,6 +159,7 @@ async def init_database() -> None:
             for column_name, column_type in (
                 ("ic_number", "VARCHAR(30)"),
                 ("employee_code", "VARCHAR(50)"),
+                ("position", "VARCHAR(100)"),
                 ("site_id", "INTEGER"),
                 ("is_active", "BOOLEAN DEFAULT 1"),
             ):
@@ -305,6 +306,14 @@ async def init_database() -> None:
                     """
                     ALTER TABLE workers
                     ADD COLUMN IF NOT EXISTS employee_code VARCHAR(50)
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    ALTER TABLE workers
+                    ADD COLUMN IF NOT EXISTS position VARCHAR(100)
                     """
                 )
             )
