@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from bot.notifications import send_leave_review_to_worker_via_configured_bot
+from bot.notifications import send_leave_review_to_group_via_configured_bot, send_leave_review_to_worker_via_configured_bot
 from models import session_scope
 from services.leave_service import (
     LeaveError,
@@ -126,6 +126,7 @@ async def leaves_approve(
     reviewed_leave_id = await _review_leave(leave_id, approve=True, reviewer=current_admin_username(request))
     if reviewed_leave_id is not None:
         await send_leave_review_to_worker_via_configured_bot(reviewed_leave_id)
+        await send_leave_review_to_group_via_configured_bot(reviewed_leave_id)
     return RedirectResponse(
         url=_leaves_redirect_url(request, site_id=site_id, return_to=return_to),
         status_code=303,
@@ -156,6 +157,7 @@ async def leaves_reject(
     reviewed_leave_id = await _review_leave(leave_id, approve=False, reviewer=current_admin_username(request))
     if reviewed_leave_id is not None:
         await send_leave_review_to_worker_via_configured_bot(reviewed_leave_id)
+        await send_leave_review_to_group_via_configured_bot(reviewed_leave_id)
     return RedirectResponse(
         url=_leaves_redirect_url(request, site_id=site_id, return_to=return_to),
         status_code=303,

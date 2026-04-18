@@ -218,6 +218,29 @@ def build_leave_summary_text(
     )
 
 
+def build_leave_review_group_text(
+    leave_id: int,
+    worker_name: str,
+    leave_type: str,
+    start_date: date,
+    end_date: date,
+    day_portion: Optional[str],
+    status: str,
+) -> str:
+    status_map = {
+        "approved": "DILULUSKAN",
+        "rejected": "DITOLAK",
+    }
+    return (
+        f"<b>Makluman Keputusan Cuti #{leave_id}</b>\n"
+        f"Pekerja: {worker_name}\n"
+        f"Jenis: {leave_label(leave_type, day_portion=day_portion)}\n"
+        f"Tarikh: {format_display_date(start_date)} hingga {format_display_date(end_date)}\n"
+        f"Tempoh: {format_leave_duration(start_date=start_date, end_date=end_date, day_portion=day_portion)}\n"
+        f"Status: <b>{status_map.get(status, status.upper())}</b>"
+    )
+
+
 def build_leave_review_text(
     leave_id: int,
     leave_type: str,

@@ -9,7 +9,7 @@ from aiogram.enums import ParseMode
 from bot.messages import build_public_holiday_sync_text
 from bot.reminders import extract_reminder_chat_ids
 from bot.keyboards import leave_review_keyboard
-from bot.messages import build_attendance_sync_text, build_leave_review_text, build_leave_summary_text
+from bot.messages import build_attendance_sync_text, build_leave_review_group_text, build_leave_review_text, build_leave_summary_text
 from config import get_settings
 from models import session_scope
 from services.leave_service import get_leave_request, leave_requires_photo
@@ -134,6 +134,48 @@ async def send_leave_review_to_worker_via_configured_bot(leave_request_id: int) 
     )
     try:
         await send_leave_review_to_worker(bot, leave_request_id)
+        return True
+    finally:
+        await bot.session.close()
+
+
+async def send_leave_review_to_group(bot: Bot, leave_request_id: int) -> None:
+    settings = get_settings()
+    async with session_scope() as session:
+        leave_request = await get_leave_request(session, leave_request_id)
+        if not leave_request:
+            return
+
+        group_chat_id = _leave_group_chat_id(leave_request, settings.group_id)
+        if group_chat_id is None:
+            return
+
+        text = build_leave_review_group_text(
+            leave_request.id,
+            leave_request.worker.full_name,
+            leave_request.leave_type,
+            leave_request.start_date,
+            leave_request.end_date,
+            leave_request.day_portion,
+            leave_request.status,
+        )
+        try:
+            await bot.send_message(chat_id=group_chat_id, text=text)
+        except Exception:
+            logger.exception("Failed to send leave review to group %s for request %s.", group_chat_id, leave_request.id)
+
+
+async def send_leave_review_to_group_via_configured_bot(leave_request_id: int) -> bool:
+    settings = get_settings()
+    if not settings.bot_enabled:
+        return False
+
+    bot = Bot(
+        token=settings.bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        await send_leave_review_to_group(bot, leave_request_id)
         return True
     finally:
         await bot.session.close()
