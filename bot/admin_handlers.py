@@ -21,7 +21,7 @@ from bot.keyboards import (
     leave_review_keyboard,
 )
 from bot.reminders import extract_reminder_chat_ids
-from bot.notifications import send_leave_review_to_worker
+from bot.notifications import send_leave_review_to_group, send_leave_review_to_worker
 from bot.messages import (
     admin_menu_text,
     build_admin_report_format_picker_text,
@@ -587,6 +587,7 @@ async def _review_leave(callback: CallbackQuery, bot: Bot, *, approve: bool) -> 
         action_label = "ditolak"
     await callback.message.answer(f"Permohonan cuti #{leave_request.id} telah {action_label}.")
     await send_leave_review_to_worker(bot, leave_request.id)
+    await send_leave_review_to_group(bot, leave_request.id)
 
 
 @router.callback_query(F.data.startswith("leave:approve:"))
