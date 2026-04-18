@@ -179,7 +179,7 @@ async def _show_custom_report_site_picker(callback: CallbackQuery) -> None:
         sites = list(await list_sites(session, active_only=True))
 
     if not sites:
-        await callback.message.answer("Tiada site aktif ditemui untuk jana laporan.")
+        await callback.message.answer("Tiada site aktif untuk jana laporan.")
         return
 
     await callback.message.answer(
@@ -191,7 +191,7 @@ async def _show_custom_report_site_picker(callback: CallbackQuery) -> None:
 async def _show_custom_report_month_picker(callback: CallbackQuery, *, site_id: int, year: int) -> None:
     site = await _get_active_site(site_id)
     if not site:
-        await callback.message.answer("Site tidak ditemui atau tidak lagi aktif.")
+        await callback.message.answer("Site tidak jumpa atau sudah tidak aktif.")
         return
 
     await callback.message.answer(
@@ -204,7 +204,7 @@ async def _show_custom_report_month_picker(callback: CallbackQuery, *, site_id: 
 @router.message(F.text.func(is_admin_menu_alias))
 async def admin_menu(message: Message) -> None:
     if not is_admin(message.from_user.id):
-        await message.answer("Arahan ini hanya untuk pentadbir Telegram yang didaftarkan dalam ADMIN_IDS.")
+        await message.answer("Arahan ni hanya untuk pentadbir yang didaftarkan.")
         return
     await send_admin_menu_message(message)
 
@@ -237,7 +237,7 @@ async def broadcast_bot_guide(callback: CallbackQuery, bot: Bot) -> None:
     chat_ids = extract_reminder_chat_ids(list(sites), settings.group_id)
     if not chat_ids:
         await callback.message.answer(
-            "Tiada group Telegram yang dikonfigurasi. Sila tetapkan GROUP_ID atau telegram_group_id untuk site."
+            "Tiada group Telegram yang dikonfigurasi. Tetapkan GROUP_ID atau telegram_group_id untuk site."
         )
         return
 
@@ -257,7 +257,7 @@ async def broadcast_bot_guide(callback: CallbackQuery, bot: Bot) -> None:
         await callback.message.answer(f"Panduan berjaya dihantar ke {sent} group{suffix}.")
     else:
         await callback.message.answer(
-            "Panduan gagal dihantar ke semua group. Pastikan bot adalah ahli group dan mempunyai kebenaran menghantar mesej."
+            "Panduan gagal dihantar. Pastikan bot ada dalam group dan ada kebenaran untuk hantar mesej."
         )
 
 
@@ -421,7 +421,7 @@ async def choose_custom_report_month(callback: CallbackQuery) -> None:
 
     site = await _get_active_site(site_id)
     if not site:
-        await callback.message.answer("Site tidak ditemui atau tidak lagi aktif.")
+        await callback.message.answer("Site tidak jumpa atau sudah tidak aktif.")
         return
 
     await callback.message.answer(
@@ -449,7 +449,7 @@ async def run_custom_report(callback: CallbackQuery) -> None:
 
     site = await _get_active_site(site_id)
     if not site:
-        await callback.message.answer("Site tidak ditemui atau tidak lagi aktif.")
+        await callback.message.answer("Site tidak jumpa atau sudah tidak aktif.")
         return
 
     if action == "summary":

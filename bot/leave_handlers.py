@@ -83,19 +83,19 @@ def _in_leave_flow(state: str | None) -> bool:
 async def _cancel_leave_flow(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
-        "Permohonan cuti dibatalkan. Anda boleh kembali ke menu pekerja.",
+        "Ok, permohonan cuti dibatalkan.",
         reply_markup=worker_menu_keyboard(),
     )
 
 
 async def _show_leave_type_prompt(target: Message, *, editing: bool = False) -> None:
-    intro = "Sila pilih jenis cuti." if not editing else "Baik, sila pilih semula jenis cuti."
+    intro = "Pilih jenis cuti:" if not editing else "Ok, pilih jenis cuti semula:"
     await target.answer(intro, reply_markup=leave_type_keyboard(cancel_callback=LEAVE_CANCEL_CALLBACK))
 
 
 async def _show_leave_day_portion_prompt(target: Message) -> None:
     await target.answer(
-        "Sila pilih sama ada cuti ini sehari penuh atau separuh hari.",
+        "Sehari penuh atau separuh hari?",
         reply_markup=leave_day_portion_keyboard(
             back_callback=LEAVE_BACK_CALLBACK,
             cancel_callback=LEAVE_CANCEL_CALLBACK,
@@ -123,7 +123,7 @@ _QUICK_REASONS: dict[str, str] = {
 
 async def _show_start_date_prompt(target: Message, *, leave_type: str, editing: bool = False) -> None:
     if _uses_quick_date_picker(leave_type):
-        prompt = "Sila pilih tarikh mula:" if not editing else "Sila pilih semula tarikh mula:"
+        prompt = "Pilih tarikh mula:" if not editing else "Pilih semula tarikh mula:"
         await target.answer(
             prompt,
             reply_markup=leave_quick_start_date_keyboard(
@@ -135,9 +135,9 @@ async def _show_start_date_prompt(target: Message, *, leave_type: str, editing: 
         if leave_type == "annual" and not editing:
             lines.append(annual_leave_notice_text())
         lines.append(
-            "Sila hantar tarikh mula dalam format YYYY-MM-DD atau DD/MM/YYYY."
+            "Hantar tarikh mula — boleh guna format 17/04/2026 atau 2026-04-17."
             if not editing
-            else "Sila hantar semula tarikh mula dalam format YYYY-MM-DD atau DD/MM/YYYY."
+            else "Hantar semula tarikh mula — format: 17/04/2026 atau 2026-04-17."
         )
         await target.answer(
             "\n".join(lines),
@@ -150,7 +150,7 @@ async def _show_start_date_prompt(target: Message, *, leave_type: str, editing: 
 
 async def _show_end_date_prompt(target: Message, *, leave_type: str, editing: bool = False) -> None:
     if _uses_quick_date_picker(leave_type):
-        prompt = "Sila pilih tarikh akhir:" if not editing else "Sila pilih semula tarikh akhir:"
+        prompt = "Pilih tarikh akhir:" if not editing else "Pilih semula tarikh akhir:"
         await target.answer(
             prompt,
             reply_markup=leave_quick_end_date_keyboard(
@@ -159,9 +159,9 @@ async def _show_end_date_prompt(target: Message, *, leave_type: str, editing: bo
         )
     else:
         await target.answer(
-            "Sila hantar tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY."
+            "Hantar tarikh akhir — boleh guna format 17/04/2026 atau 2026-04-17."
             if not editing
-            else "Sila hantar semula tarikh akhir dalam format YYYY-MM-DD atau DD/MM/YYYY.",
+            else "Hantar semula tarikh akhir — format: 17/04/2026 atau 2026-04-17.",
             reply_markup=flow_control_keyboard(
                 back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK
             ),
@@ -170,7 +170,7 @@ async def _show_end_date_prompt(target: Message, *, leave_type: str, editing: bo
 
 
 async def _show_reason_prompt(target: Message, *, editing: bool = False) -> None:
-    prompt = "Sila pilih atau hantar sebab permohonan cuti:" if not editing else "Sila pilih atau hantar semula sebab cuti:"
+    prompt = "Pilih atau taip sebab cuti:" if not editing else "Pilih atau taip semula sebab cuti:"
     await target.answer(
         prompt,
         reply_markup=leave_reason_keyboard(
@@ -271,7 +271,7 @@ async def _submit_leave_request(message: Message, state: FSMContext, bot: Bot, *
             telegram_user_id, type(exc).__name__, exc,
         )
         await message.answer(
-            f"Ralat sistem semasa menghantar permohonan ({type(exc).__name__}). Sila cuba lagi atau hubungi admin."
+            f"Ada masalah sistem masa nak hantar permohonan ({type(exc).__name__}). Cuba lagi atau hubungi admin."
         )
         return
 
@@ -336,7 +336,7 @@ async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
         if leave_requires_photo(data.get("leave_type", "")):
             await state.set_state(LeaveApplicationStates.photo)
             await message.answer(
-                "Sila muat naik semula gambar sokongan. Bukti ini akan dihantar ke group site bersama alasan.",
+                "Muat naik semula gambar sokongan. Bukti ni akan dihantar ke group site.",
                 reply_markup=flow_control_keyboard(back_callback=LEAVE_BACK_CALLBACK, cancel_callback=LEAVE_CANCEL_CALLBACK),
             )
             await _prompt_for_reply(message, "Muat naik gambar sokongan di sini:", "lampirkan foto MC / surat doktor")
@@ -345,7 +345,7 @@ async def _step_back_in_leave_flow(message: Message, state: FSMContext) -> None:
         await _show_reason_prompt(message, editing=True)
         return
 
-    await message.answer("Anda sudah berada di langkah pertama. Sila pilih jenis cuti atau tekan Batal.")
+    await message.answer("Dah kat langkah pertama. Pilih jenis cuti atau tekan Batal.")
 
 
 # ---------------------------------------------------------------------------
@@ -377,7 +377,7 @@ async def start_leave_flow(callback: CallbackQuery, state: FSMContext, bot: Bot)
             chat_type=callback.message.chat.type,
         )
         await callback.message.answer(
-            "Permohonan cuti hanya boleh dibuat dalam kumpulan Telegram site anda. Sila gunakan group ini untuk memohon cuti."
+            "Permohonan cuti mesti dibuat dalam group Telegram site anda. Guna group tersebut untuk mohon cuti."
         )
         return
 
@@ -409,7 +409,7 @@ async def pick_leave_type(callback: CallbackQuery, state: FSMContext) -> None:
     # re-check the group restriction before restarting cleanly.
     if not _in_leave_flow(current_state):
         if not worker_chat_is_allowed(worker, callback):
-            await callback.answer("Permohonan cuti hanya boleh dibuat dalam kumpulan Telegram site anda.", show_alert=True)
+            await callback.answer("Cuti mesti dipohon dalam group Telegram site anda.", show_alert=True)
             return
         await state.clear()
         await state.set_state(LeaveApplicationStates.leave_type)
@@ -465,8 +465,8 @@ async def capture_start_date(message: Message, state: FSMContext) -> None:
         earliest = annual_leave_earliest_start_date()
         await message.answer(
             annual_leave_notice_text()
-            + f"\nTarikh terawal yang dibenarkan ialah <b>{format_display_date(earliest)}</b>.\n"
-            "Sila masukkan semula tarikh mula."
+            + f"\nTarikh terawal yang boleh dipilih ialah <b>{format_display_date(earliest)}</b>.\n"
+            "Cuba hantar semula tarikh mula."
         )
         return
 
@@ -481,9 +481,9 @@ async def pick_start_date_quick(callback: CallbackQuery, state: FSMContext) -> N
     current_state = await state.get_state()
     if current_state != LeaveApplicationStates.start_date.state:
         if _in_leave_flow(current_state):
-            await callback.answer("Sila ikuti langkah semasa atau tekan Kembali untuk ubah pilihan.")
+            await callback.answer("Ikut langkah semasa atau tekan Kembali untuk tukar.")
         else:
-            await callback.answer("Tiada permohonan aktif. Sila tekan 'Mohon Cuti' untuk mula.")
+            await callback.answer("Tiada permohonan aktif. Tekan 'Mohon Cuti' untuk mula.")
         return
 
     offsets = {"today": 0, "tomorrow": 1, "yesterday": -1}
@@ -542,9 +542,9 @@ async def pick_end_date_quick(callback: CallbackQuery, state: FSMContext) -> Non
     current_state = await state.get_state()
     if current_state != LeaveApplicationStates.end_date.state:
         if _in_leave_flow(current_state):
-            await callback.answer("Sila ikuti langkah semasa atau tekan Kembali untuk ubah pilihan.")
+            await callback.answer("Ikut langkah semasa atau tekan Kembali untuk tukar.")
         else:
-            await callback.answer("Tiada permohonan aktif. Sila tekan 'Mohon Cuti' untuk mula.")
+            await callback.answer("Tiada permohonan aktif. Tekan 'Mohon Cuti' untuk mula.")
         return
 
     await callback.answer()
@@ -599,9 +599,9 @@ async def pick_leave_day_portion(callback: CallbackQuery, state: FSMContext) -> 
     if current_state != LeaveApplicationStates.day_portion.state:
         # Soft toast only — never block with show_alert so the user is not disrupted.
         if _in_leave_flow(current_state):
-            await callback.answer("Untuk tukar pilihan ini, tekan butang Kembali dahulu.")
+            await callback.answer("Tekan Kembali dahulu untuk tukar pilihan ni.")
         else:
-            await callback.answer("Tiada permohonan aktif. Sila tekan 'Mohon Cuti' untuk mula.")
+            await callback.answer("Tiada permohonan aktif. Tekan 'Mohon Cuti' untuk mula.")
         return
 
     await callback.answer()
@@ -636,9 +636,9 @@ async def pick_reason_quick(callback: CallbackQuery, state: FSMContext) -> None:
     current_state = await state.get_state()
     if current_state != LeaveApplicationStates.reason.state:
         if _in_leave_flow(current_state):
-            await callback.answer("Sila ikuti langkah semasa atau tekan Kembali untuk ubah pilihan.")
+            await callback.answer("Ikut langkah semasa atau tekan Kembali untuk tukar.")
         else:
-            await callback.answer("Tiada permohonan aktif. Sila tekan 'Mohon Cuti' untuk mula.")
+            await callback.answer("Tiada permohonan aktif. Tekan 'Mohon Cuti' untuk mula.")
         return
 
     key = callback.data.split(":")[-1]
@@ -658,13 +658,13 @@ async def pick_reason_quick(callback: CallbackQuery, state: FSMContext) -> None:
     if leave_requires_photo(data["leave_type"]):
         await state.set_state(LeaveApplicationStates.photo)
         photo_prompt = (
-            "Sila muat naik gambar sokongan sekarang. "
-            "Bukti ini akan dihantar ke group site bersama alasan."
+            "Muat naik gambar sokongan sekarang. "
+            "Bukti ni akan dihantar ke group site."
         )
         if data.get("group_delivery_unavailable"):
             photo_prompt = (
-                "Sila muat naik gambar sokongan sekarang. "
-                "Bukti ini akan dihantar kepada admin dahulu kerana group site belum dikonfigurasi."
+                "Muat naik gambar sokongan sekarang. "
+                "Akan dihantar ke admin dulu sebab group site belum dikonfigurasi."
             )
         await callback.message.answer(
             photo_prompt,
@@ -688,7 +688,7 @@ async def capture_reason(message: Message, state: FSMContext) -> None:
     reason = (message.text or "").strip()
     if not reason:
         _log_leave_block("missing_reason", telegram_user_id=message.from_user.id, chat_type=message.chat.type)
-        await message.answer("Sebab permohonan cuti diperlukan.")
+        await message.answer("Kena isi sebab cuti.")
         return
 
     data = await state.get_data()
@@ -696,13 +696,13 @@ async def capture_reason(message: Message, state: FSMContext) -> None:
     if leave_requires_photo(data["leave_type"]):
         await state.set_state(LeaveApplicationStates.photo)
         photo_prompt = (
-            "Sila muat naik gambar sokongan sekarang. "
-            "Bukti ini akan dihantar ke group site bersama alasan."
+            "Muat naik gambar sokongan sekarang. "
+            "Bukti ni akan dihantar ke group site."
         )
         if data.get("group_delivery_unavailable"):
             photo_prompt = (
-                "Sila muat naik gambar sokongan sekarang. "
-                "Bukti ini akan dihantar kepada admin dahulu kerana group site belum dikonfigurasi."
+                "Muat naik gambar sokongan sekarang. "
+                "Akan dihantar ke admin dulu sebab group site belum dikonfigurasi."
             )
         await message.answer(
             photo_prompt,
@@ -735,8 +735,8 @@ async def prompt_photo_again(message: Message, state: FSMContext) -> None:
         await _step_back_in_leave_flow(message, state)
         return
     await message.answer(
-        "Gambar sokongan diperlukan untuk Cuti Sakit dan Cuti Kecemasan. "
-        "Sila muat naik imej supaya bukti boleh dilampirkan bersama alasan."
+        "Kena muat naik gambar sokongan untuk jenis cuti ini. "
+        "Lampirkan foto MC atau surat doktor."
     )
 
 
@@ -760,9 +760,9 @@ async def confirm_leave_request(callback: CallbackQuery, state: FSMContext, bot:
     if current_state != LeaveApplicationStates.confirmation.state:
         # Soft toast only — never a blocking popup.
         if _in_leave_flow(current_state):
-            await callback.answer("Sila lengkapkan borang cuti terlebih dahulu.")
+            await callback.answer("Lengkapkan borang cuti dulu.")
         else:
-            await callback.answer("Tiada permohonan aktif. Sila tekan 'Mohon Cuti' untuk mula.")
+            await callback.answer("Tiada permohonan aktif. Tekan 'Mohon Cuti' untuk mula.")
         return
 
     await callback.answer()
@@ -778,7 +778,7 @@ async def confirm_leave_request(callback: CallbackQuery, state: FSMContext, bot:
 async def handle_leave_back_callback(callback: CallbackQuery, state: FSMContext) -> None:
     current = await state.get_state()
     if not _in_leave_flow(current):
-        await callback.answer("Tiada permohonan aktif. Sila tekan 'Mohon Cuti' untuk mula.")
+        await callback.answer("Tiada permohonan aktif. Tekan 'Mohon Cuti' untuk mula.")
         return
     await callback.answer()
     await _step_back_in_leave_flow(callback.message, state)

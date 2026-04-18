@@ -151,6 +151,7 @@ def _build_worker_report_row(
     return {
         "worker_name": worker.full_name,
         "employee_code": worker.employee_code or "-",
+        "position": worker.position or "",
         "site_name": _site_name(worker),
         "days": day_values,
         "present_days": present_days,

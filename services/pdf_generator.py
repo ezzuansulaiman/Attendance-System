@@ -85,7 +85,7 @@ def _prepare_report_for_pdf(report: dict[str, Any]) -> dict[str, Any]:
     for row in report.get("rows", []):
         sanitized_row = dict(row)
         sanitized_row["worker_name"] = _sanitize_pdf_field(row.get("worker_name"), max_length=240, chunk_size=16)
-        sanitized_row["employee_code"] = _sanitize_pdf_field(row.get("employee_code"), max_length=80, chunk_size=8)
+        sanitized_row["position"] = _sanitize_pdf_field(row.get("position"), max_length=80, chunk_size=12)
         sanitized_row["days"] = [_mask_client_submission_day_value(value) for value in row.get("days", [])]
         sanitized_rows.append(sanitized_row)
 
@@ -101,14 +101,14 @@ def _prepare_report_for_pdf(report: dict[str, Any]) -> dict[str, Any]:
 def _build_pdf_debug_context(report: dict[str, Any]) -> dict[str, Any]:
     rows = list(report.get("rows", []))
     worker_name_lengths = [_normalize_pdf_text(row.get("worker_name")) for row in rows]
-    employee_code_lengths = [_normalize_pdf_text(row.get("employee_code")) for row in rows]
+    position_lengths = [_normalize_pdf_text(row.get("position")) for row in rows]
     return {
         "year": report.get("year"),
         "month": report.get("month"),
         "site_scope": _normalize_pdf_text(report.get("site_name")),
         "worker_count": len(rows),
         "max_worker_name_length": max((len(value) for value in worker_name_lengths), default=0),
-        "max_employee_code_length": max((len(value) for value in employee_code_lengths), default=0),
+        "max_position_length": max((len(value) for value in position_lengths), default=0),
         "is_empty": not rows,
     }
 
@@ -294,7 +294,7 @@ def _build_attendance_table(*, report: dict[str, Any], styles: dict[str, Paragra
         [
             _paragraph("No", styles["table_header"]),
             _paragraph("Employee Name", styles["table_header"]),
-            _paragraph("Code", styles["table_header"]),
+            _paragraph("Position", styles["table_header"]),
             *[_paragraph(str(day), styles["table_header"]) for day in range(1, 32)],
         ]
     ]
@@ -304,7 +304,7 @@ def _build_attendance_table(*, report: dict[str, Any], styles: dict[str, Paragra
             [
                 _paragraph(index, styles["table_cell"]),
                 _paragraph(row["worker_name"], styles["table_name"]),
-                _paragraph(row["employee_code"], styles["table_cell"]),
+                _paragraph(row.get("position", ""), styles["table_cell"]),
                 *[_paragraph(value or "", styles["table_cell"]) for value in row["days"]],
             ]
         )
